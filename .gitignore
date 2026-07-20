@@ -1,0 +1,96 @@
+# ==========================================
+# Python
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+.env
+.venv/
+venv/
+ENV/
+env/
+*.whl
+.python-version
+
+# ==========================================
+# Jupyter Notebook
+# ==========================================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ==========================================
+# Conda / Anaconda
+# ==========================================
+.conda/
+conda-meta/
+
+# ==========================================
+# Docker
+# ==========================================
+docker-compose.override.yml
+.docker/
+*.log
+
+# ==========================================
+# Kubernetes
+# ==========================================
+*.kubeconfig
+kubeconfig.*
+*secrets*.yaml
+*secret*.yaml
+!k8s/*-example.yaml
+*.kube/
+
+# ==========================================
+# IDE / Editor
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# ==========================================
+# 项目数据
+# ==========================================
+data/
+!data/.gitkeep
+logs/
+output/
+*.csv
+*.parquet
+*.db
+*.sqlite
+*.sqlite3
+*.xlsx
+*.xls
+
+# ==========================================
+# OS 系统文件
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ==========================================
+# 敏感/凭证文件
+# ==========================================
+*.pem
+*.key
+*.token
+credentials*
+.env.local
+.env.production

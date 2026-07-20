@@ -1,0 +1,20 @@
+# ==========================================
+# Data Platform App Service
+# ==========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-platform-app
+  namespace: data-platform-demo
+  labels:
+    app: data-platform
+spec:
+  type: ClusterIP
+  selector:
+    app: data-platform
+    component: api
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8000
+      targetPort: 8000

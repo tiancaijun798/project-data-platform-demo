@@ -1,0 +1,13 @@
+# ==========================================
+# project-data-platform-demo
+# Python dependencies
+# ==========================================
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pandas>=2.2.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+redis>=5.2.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+httpx>=0.28.0

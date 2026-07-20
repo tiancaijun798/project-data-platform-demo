@@ -1,0 +1,10 @@
+# ==========================================
+# Kubernetes 命名空间
+# ==========================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data-platform-demo
+  labels:
+    app: data-platform
+    env: dev

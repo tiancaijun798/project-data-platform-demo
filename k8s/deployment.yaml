@@ -1,0 +1,52 @@
+# ==========================================
+# Data Platform App Deployment
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-platform-app
+  namespace: data-platform-demo
+  labels:
+    app: data-platform
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: data-platform
+      component: api
+  template:
+    metadata:
+      labels:
+        app: data-platform
+        component: api
+    spec:
+      containers:
+        - name: app
+          image: data-platform-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 10

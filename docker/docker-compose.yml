@@ -1,0 +1,77 @@
+version: '3.9'
+
+# ==========================================
+# project-data-platform-demo
+# Docker Compose 开发环境
+# ==========================================
+
+services:
+
+  # ---- 示例 Python 应用 ----
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: data-platform-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../src:/app/src:ro
+      - ../data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ---- PostgreSQL 数据库 ----
+  postgres:
+    image: postgres:16-alpine
+    container_name: data-platform-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-data_platform}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d data_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- Redis 缓存 ----
+  redis:
+    image: redis:7-alpine
+    container_name: data-platform-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  data-platform-net:
+    driver: bridge
+    name: data-platform-net
+
+volumes:
+  postgres_data:
+    name: data-platform-postgres
+  redis_data:
+    name: data-platform-redis
