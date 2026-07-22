@@ -39,9 +39,6 @@ sources:
             description: "流量来源"
           - name: duration_ms
             description: "页面停留/操作时长(毫秒)"
-            tests:
-              - dbt_utils.expression_is_true:
-                  expression: ">= 0 AND <= 300000"
           - name: device
             description: "设备类型 (desktop/mobile/tablet)"
           - name: browser

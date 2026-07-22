@@ -16,6 +16,11 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
       AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
       _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-kafka-python}
+      DBT_HOST: data-platform-db
+      DBT_PORT: '5432'
+      DBT_USER: admin
+      DBT_PASSWORD: changeme
+      DBT_DBNAME: data_platform
     volumes:
       - ../dags:/opt/airflow/dags
       - ../logs:/opt/airflow/logs
@@ -46,6 +51,11 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
       _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-kafka-python}
+      DBT_HOST: data-platform-db
+      DBT_PORT: '5432'
+      DBT_USER: admin
+      DBT_PASSWORD: changeme
+      DBT_DBNAME: data_platform
     volumes:
       - ../dags:/opt/airflow/dags
       - ../logs:/opt/airflow/logs
@@ -71,6 +81,11 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
       _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-kafka-python}
+      DBT_HOST: data-platform-db
+      DBT_PORT: '5432'
+      DBT_USER: admin
+      DBT_PASSWORD: changeme
+      DBT_DBNAME: data_platform
     volumes:
       - ../dags:/opt/airflow/dags
       - ../logs:/opt/airflow/logs
@@ -96,6 +111,11 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
       _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-kafka-python}
+      DBT_HOST: data-platform-db
+      DBT_PORT: '5432'
+      DBT_USER: admin
+      DBT_PASSWORD: changeme
+      DBT_DBNAME: data_platform
     volumes:
       - ../dags:/opt/airflow/dags
       - ../logs:/opt/airflow/logs
