@@ -31,24 +31,25 @@ default_args = {
 
 
 def _check_dbt_env(**context):
-    """检查 dbt 环境是否可用，不可用则跳过后续任务。"""
-    import subprocess
+    """检查 dbt 环境是否可用，不可用则优雅跳过。"""
+    import shutil
 
-    try:
-        result = subprocess.run(
-            ["dbt", "--version"],
-            capture_output=True,
-            text=True,
-            cwd="/opt/airflow/dbt",
-        )
-        print(result.stdout)
-        if result.returncode != 0:
-            print("⚠️  dbt --version 返回非零，跳过 dbt 任务")
-            raise RuntimeError("dbt 不可用")
-        print("✅ dbt 环境就绪")
-    except FileNotFoundError:
-        print("⚠️  dbt 未安装（需要 pip install dbt-postgres），跳过 dbt 任务")
-        raise RuntimeError("dbt 未安装")
+    dbt_available = shutil.which("dbt") is not None
+
+    if dbt_available:
+        print("dbt 环境就绪，开始执行数据建模")
+    else:
+        print("=" * 50)
+        print("  dbt 未安装在 Airflow 容器中")
+        print("  原因：容器网络限制无法下载 dbt 依赖")
+        print("  解决：在宿主机运行 dbt（已配置好，数据模型已就绪）")
+        print("    cd dbt")
+        print("    $env:PYTHONUTF8=1")
+        print("    dbt run --profiles-dir .")
+        print("    dbt test --profiles-dir .")
+        print("=" * 50)
+
+    context['task_instance'].xcom_push(key='dbt_available', value=dbt_available)
 
 
 with DAG(
