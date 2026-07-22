@@ -1,0 +1,48 @@
+# ==========================================
+# dbt 项目配置 — Data Platform Demo
+# 数据建模: raw → clean → analytics
+# ==========================================
+
+name: 'data_platform_demo'
+version: '1.0.0'
+config-version: 2
+
+# 配置文件路径
+profile: 'data_platform_demo'
+
+# 模型目录
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+# 清理构建产物
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# 模型全局配置
+models:
+  data_platform_demo:
+    # ── 原始数据层 raw ──
+    raw:
+      +materialized: view
+      +schema: raw
+      +tags: ["raw", "source"]
+      +docs:
+        node_color: "#c0392b"
+
+    # ── 清洗数据层 clean ──
+    clean:
+      +materialized: table
+      +schema: clean
+      +tags: ["clean", "transformed"]
+      +docs:
+        node_color: "#2980b9"
+
+# 测试配置
+tests:
+  +store_failures: true
+  +schema: test_failures

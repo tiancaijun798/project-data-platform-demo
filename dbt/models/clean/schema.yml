@@ -1,0 +1,52 @@
+version: 2
+
+# ==========================================
+# 清洗数据层 (clean) Schema 定义
+# ==========================================
+
+models:
+  - name: dim_users
+    description: "用户维度表 — 去重用户列表"
+    columns:
+      - name: user_id
+        description: "用户 ID"
+        tests:
+          - not_null
+          - unique
+      - name: first_seen_at
+        description: "用户首次活跃时间"
+      - name: last_seen_at
+        description: "用户最近活跃时间"
+      - name: total_events
+        description: "用户事件总数"
+
+  - name: fct_user_events_daily
+    description: "每日用户事件汇总事实表"
+    columns:
+      - name: event_date
+        description: "事件日期"
+        tests:
+          - not_null
+      - name: event_type
+        description: "事件类型"
+        tests:
+          - not_null
+      - name: total_events
+        description: "事件总数"
+      - name: unique_users
+        description: "去重用户数"
+      - name: avg_duration_ms
+        description: "平均操作时长(ms)"
+
+  - name: dim_products
+    description: "产品维度表"
+    columns:
+      - name: product_id
+        description: "产品 ID"
+        tests:
+          - not_null
+          - unique
+      - name: total_views
+        description: "总浏览次数"
+      - name: total_purchases
+        description: "总购买次数"

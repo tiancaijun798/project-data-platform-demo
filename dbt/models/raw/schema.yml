@@ -1,0 +1,67 @@
+version: 2
+
+# ==========================================
+# 原始数据层 (raw) Schema 定义
+# ==========================================
+
+sources:
+  - name: raw_data
+    description: "来自 Kafka → JSONL → Parquet 的原始事件数据"
+    schema: raw
+    tables:
+      - name: user_events
+        description: "用户行为事件原始表"
+        columns:
+          - name: event_id
+            description: "事件唯一标识 (UUID)"
+            tests:
+              - not_null
+              - unique
+          - name: user_id
+            description: "用户 ID"
+            tests:
+              - not_null
+          - name: event_type
+            description: "事件类型 (click/view/purchase/etc)"
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ["click", "view", "add_to_cart", "purchase", "search", "logout"]
+          - name: product_id
+            description: "产品 ID (可为空)"
+          - name: timestamp
+            description: "事件原始时间戳字符串"
+          - name: event_ts
+            description: "解析后的时间戳"
+          - name: page
+            description: "事件发生的页面"
+          - name: referrer
+            description: "流量来源"
+          - name: duration_ms
+            description: "页面停留/操作时长(毫秒)"
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: ">= 0 AND <= 300000"
+          - name: device
+            description: "设备类型 (desktop/mobile/tablet)"
+          - name: browser
+            description: "浏览器类型"
+          - name: processed_at
+            description: "ETL 处理时间"
+          - name: processing_date
+            description: "ETL 处理日期（分区键）"
+
+models:
+  - name: stg_user_events
+    description: "用户行为事件基础 Stage 视图"
+    columns:
+      - name: event_id
+        tests:
+          - not_null
+          - unique
+      - name: user_id
+        tests:
+          - not_null
+      - name: event_type
+        tests:
+          - not_null

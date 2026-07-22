@@ -1,0 +1,77 @@
+# ==========================================
+# Great Expectations 数据质量框架配置
+# 适配 Data Platform Demo 项目
+# ==========================================
+
+config_version: 3.0
+
+# 数据源配置
+datasources:
+  # PostgreSQL 数据源
+  postgres_data_platform:
+    class_name: Datasource
+    execution_engine:
+      class_name: SqlAlchemyExecutionEngine
+      connection_string: "postgresql://admin:changeme@localhost:5432/data_platform"
+    data_connectors:
+      default_runtime_data_connector_name:
+        class_name: RuntimeDataConnector
+        batch_identifiers:
+          - default_identifier_name
+      default_inferred_data_connector_name:
+        class_name: InferredAssetSqlDataConnector
+        include_schema_name: true
+
+  # Parquet 数据源
+  parquet_files:
+    class_name: Datasource
+    execution_engine:
+      class_name: PandasExecutionEngine
+    data_connectors:
+      default_runtime_data_connector_name:
+        class_name: RuntimeDataConnector
+        batch_identifiers:
+          - default_identifier_name
+      default_inferred_data_connector_name:
+        class_name: InferredAssetFilesystemDataConnector
+        base_directory: ../data/output_parquet/
+        glob_directive: "*.parquet"
+        default_regex:
+          pattern: "(.*)\\.parquet$"
+          group_names:
+            - data_asset_name
+
+# 数据文档站点配置
+data_docs_sites:
+  local_site:
+    class_name: SiteBuilder
+    show_how_to_buttons: true
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: uncommitted/data_docs/local_site/
+    site_index_builders:
+      - class_name: DefaultSiteIndexBuilder
+
+# 校验结果存储
+validations_store_name: validations_store
+stores:
+  expectations_store:
+    class_name: ExpectationsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: expectations/
+  validations_store:
+    class_name: ValidationsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: uncommitted/validations/
+  evaluation_parameter_store:
+    class_name: EvaluationParameterStore
+
+# 匿名使用统计
+anonymous_usage_statistics:
+  enabled: false
+
+# 通知配置
+notebooks:
+data_context_id: 00000000-0000-0000-0000-000000000000

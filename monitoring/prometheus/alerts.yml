@@ -1,0 +1,57 @@
+# ==========================================
+# Prometheus 告警规则
+# ==========================================
+
+groups:
+  - name: airflow_alerts
+    interval: 30s
+    rules:
+      # DAG 任务失败率过高
+      - alert: AirflowHighTaskFailureRate
+        expr: |
+          rate(airflow_dag_task_failure_total[5m])
+          / (rate(airflow_dag_task_success_total[5m]) + rate(airflow_dag_task_failure_total[5m]))
+          > 0.3
+        for: 5m
+        labels:
+          severity: critical
+          service: airflow
+        annotations:
+          summary: "Airflow 任务失败率超过 30%"
+          description: "DAG {{ $labels.dag_id }} 任务 {{ $labels.task_id }} 失败率 {{ $value | humanizePercentage }}"
+
+      # 调度器心跳停
+      - alert: AirflowSchedulerDown
+        expr: absent(airflow_scheduler_heartbeat_total)
+        for: 2m
+        labels:
+          severity: critical
+          service: airflow
+        annotations:
+          summary: "Airflow Scheduler 心跳丢失"
+          description: "Airflow Scheduler 可能已停止运行"
+
+      # 任务队列积压
+      - alert: AirflowQueueBacklog
+        expr: airflow_pool_queued_slots > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: airflow
+        annotations:
+          summary: "Airflow 队列积压超过 100"
+          description: "Pool {{ $labels.pool }} 积压 {{ $value }} 个任务"
+
+  - name: app_alerts
+    interval: 30s
+    rules:
+      # 应用不可用
+      - alert: ApplicationDown
+        expr: up{job="data-platform-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: app
+        annotations:
+          summary: "Data Platform App 不可用"
+          description: "应用健康检查失败超过 1 分钟"

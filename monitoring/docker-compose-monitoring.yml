@@ -1,0 +1,87 @@
+# ==========================================
+# Prometheus + Grafana 监控服务
+# 采集 Airflow、系统资源、应用健康指标
+# ==========================================
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    container_name: data-mon-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring-net
+      - data-platform-net
+      - airflow-bridge-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: data-mon-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: ""
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/airflow-monitoring.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - monitoring-net
+      - data-platform-net
+      - airflow-bridge-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # StatsD Exporter (将 Airflow metrics 转换为 Prometheus 格式)
+  statsd-exporter:
+    image: prom/statsd-exporter:v0.26.1
+    container_name: data-mon-statsd
+    ports:
+      - "9102:9102"
+      - "9125:9125/udp"
+    volumes:
+      - ./prometheus/statsd_mapping.yml:/etc/statsd-exporter/mapping.yml:ro
+    command:
+      - '--statsd.mapping-config=/etc/statsd-exporter/mapping.yml'
+    networks:
+      - monitoring-net
+      - airflow-bridge-net
+    restart: unless-stopped
+
+networks:
+  monitoring-net:
+    name: data-monitoring-net
+    driver: bridge
+  data-platform-net:
+    external: true
+  airflow-bridge-net:
+    external: true
+
+volumes:
+  prometheus_data:
+    name: monitoring-prometheus
+  grafana_data:
+    name: monitoring-grafana

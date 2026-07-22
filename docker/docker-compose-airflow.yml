@@ -1,4 +1,5 @@
 # 独立Airflow部署文件，共享项目外数据库/缓存，不占用现有5432/6379端口
+# 已配置挂载 src/ data/ dags/ 目录以支持端到端数据流水线
 services:
   airflow-webserver:
     image: apache/airflow:2.10.4
@@ -12,15 +13,19 @@ services:
       AIRFLOW__CELERY__BROKER_URL: redis://:@airflow-redis:6379/0
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'true' # 自动加载官方Demo DAG，适配你的实训任务
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
       AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-      _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+      _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-kafka-python sshpass pyspark}
     volumes:
       - ../dags:/opt/airflow/dags
       - ../logs:/opt/airflow/logs
       - ../plugins:/opt/airflow/plugins
+      - ../src:/opt/airflow/src
+      - ../data:/opt/airflow/data
+      - ../scripts:/opt/airflow/scripts
     networks:
       - airflow-net
+      - data-platform-net
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 10s
@@ -39,12 +44,17 @@ services:
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+      _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-kafka-python sshpass}
     volumes:
       - ../dags:/opt/airflow/dags
       - ../logs:/opt/airflow/logs
       - ../plugins:/opt/airflow/plugins
+      - ../src:/opt/airflow/src
+      - ../data:/opt/airflow/data
+      - ../scripts:/opt/airflow/scripts
     networks:
       - airflow-net
+      - data-platform-net
     restart: unless-stopped
 
   airflow-worker:
@@ -58,12 +68,17 @@ services:
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+      _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-kafka-python sshpass}
     volumes:
       - ../dags:/opt/airflow/dags
       - ../logs:/opt/airflow/logs
       - ../plugins:/opt/airflow/plugins
+      - ../src:/opt/airflow/src
+      - ../data:/opt/airflow/data
+      - ../scripts:/opt/airflow/scripts
     networks:
       - airflow-net
+      - data-platform-net
     restart: unless-stopped
 
   airflow-triggerer:
@@ -77,12 +92,17 @@ services:
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+      _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-kafka-python sshpass}
     volumes:
       - ../dags:/opt/airflow/dags
       - ../logs:/opt/airflow/logs
       - ../plugins:/opt/airflow/plugins
+      - ../src:/opt/airflow/src
+      - ../data:/opt/airflow/data
+      - ../scripts:/opt/airflow/scripts
     networks:
       - airflow-net
+      - data-platform-net
     restart: unless-stopped
 
   airflow-init:
@@ -103,8 +123,12 @@ services:
       - ../dags:/opt/airflow/dags
       - ../logs:/opt/airflow/logs
       - ../plugins:/opt/airflow/plugins
+      - ../src:/opt/airflow/src
+      - ../data:/opt/airflow/data
+      - ../scripts:/opt/airflow/scripts
     networks:
       - airflow-net
+      - data-platform-net
 
   airflow-postgres:
     image: postgres:16-alpine
@@ -136,6 +160,8 @@ networks:
   airflow-net:
     name: airflow-bridge-net
     driver: bridge
+  data-platform-net:
+    external: true
 
 volumes:
   airflow-db-data:

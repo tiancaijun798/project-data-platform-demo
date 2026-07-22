@@ -1,0 +1,30 @@
+# ==========================================
+# dbt 连接配置 (profiles.yml)
+# 使用 PostgreSQL 作为数据仓库
+# ==========================================
+
+data_platform_demo:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_PORT', '5432') | int }}"
+      user: "{{ env_var('DBT_USER', 'admin') }}"
+      password: "{{ env_var('DBT_PASSWORD', 'changeme') }}"
+      dbname: "{{ env_var('DBT_DBNAME', 'data_platform') }}"
+      schema: public
+      threads: 4
+      keepalives_idle: 0
+      connect_timeout: 10
+
+    # 生产环境（可扩展）
+    prod:
+      type: postgres
+      host: "{{ env_var('DBT_PROD_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_PROD_PORT', '5432') | int }}"
+      user: "{{ env_var('DBT_PROD_USER', 'admin') }}"
+      password: "{{ env_var('DBT_PROD_PASSWORD', 'changeme') }}"
+      dbname: "{{ env_var('DBT_PROD_DBNAME', 'data_platform') }}"
+      schema: public
+      threads: 8

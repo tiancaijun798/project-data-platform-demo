@@ -1,0 +1,162 @@
+# ==========================================
+# GitHub Actions CI 工作流
+# 触发条件: PR → main 分支
+# 执行: dbt 编译测试 + Python lint + DAG 语法校验
+# ==========================================
+
+name: Data Platform CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:  # 支持手动触发
+
+env:
+  DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  # ──── Job 1: Python 代码质量检查 ────
+  python-lint:
+    name: Python Lint & Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装依赖
+        run: |
+          pip install flake8 black isort
+          pip install -r requirements.txt
+
+      - name: Flake8 Lint
+        run: |
+          flake8 src/ --count --max-line-length=100 --statistics \
+            --ignore=E501,W503,F401,F841 \
+            --exclude=__pycache__,__init__.py
+        continue-on-error: true
+
+      - name: Black 格式检查
+        run: |
+          black --check --diff src/ dags/ 2>&1 || echo "⚠️ 格式不一致（不阻塞）"
+        continue-on-error: true
+
+      - name: Python 语法校验
+        run: |
+          python -m py_compile dags/demo_pipeline.py
+          echo "✅ DAG 语法校验通过"
+
+  # ──── Job 2: dbt 编译 & 测试 ────
+  dbt-test:
+    name: dbt Compile & Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: changeme
+          POSTGRES_DB: data_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装 dbt-postgres
+        run: pip install dbt-postgres
+
+      - name: dbt deps
+        run: cd dbt && dbt deps
+        continue-on-error: true
+
+      - name: dbt compile
+        run: cd dbt && dbt compile
+        env:
+          DBT_HOST: localhost
+          DBT_PORT: 5432
+          DBT_USER: admin
+          DBT_PASSWORD: changeme
+          DBT_DBNAME: data_platform
+
+      - name: dbt test
+        run: cd dbt && dbt test
+        env:
+          DBT_HOST: localhost
+          DBT_PORT: 5432
+          DBT_USER: admin
+          DBT_PASSWORD: changeme
+          DBT_DBNAME: data_platform
+        continue-on-error: true
+
+      - name: dbt docs generate
+        run: cd dbt && dbt docs generate
+        env:
+          DBT_HOST: localhost
+          DBT_PORT: 5432
+          DBT_USER: admin
+          DBT_PASSWORD: changeme
+          DBT_DBNAME: data_platform
+        continue-on-error: true
+
+  # ──── Job 3: DAG 完整性校验 ────
+  dag-validation:
+    name: DAG Import & Structure Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装 Airflow
+        run: pip install apache-airflow==2.10.4 --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.13.txt" 2>&1 || pip install apache-airflow==2.10.4
+
+      - name: 校验 DAG 可导入
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'dags')
+          from demo_pipeline import dag
+          print(f'✅ DAG 导入成功: {dag.dag_id}')
+          print(f'   Tasks: {len(dag.tasks)}')
+          print(f'   Schedule: {dag.schedule_interval}')
+          "
+
+  # ──── Job 4: 汇总结果 ────
+  ci-summary:
+    name: CI Summary
+    needs: [python-lint, dbt-test, dag-validation]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: 输出汇总
+        run: |
+          echo "========================================="
+          echo "  Data Platform CI Pipeline 完成"
+          echo "========================================="
+          echo "  python-lint:    ${{ needs.python-lint.result }}"
+          echo "  dbt-test:       ${{ needs.dbt-test.result }}"
+          echo "  dag-validation: ${{ needs.dag-validation.result }}"
+          echo "========================================="
