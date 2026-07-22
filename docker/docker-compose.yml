@@ -20,6 +20,11 @@ services:
       - ../data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - DATA_PLATFORM_DB_HOST=${DATA_PLATFORM_DB_HOST:-data-platform-db}
+      - DATA_PLATFORM_DB_PORT=${DATA_PLATFORM_DB_PORT:-5432}
+      - DATA_PLATFORM_DB_USER=${DATA_PLATFORM_DB_USER:-admin}
+      - DATA_PLATFORM_DB_PASSWORD=${DATA_PLATFORM_DB_PASSWORD:-changeme}
+      - DATA_PLATFORM_DB_NAME=${DATA_PLATFORM_DB_NAME:-data_platform}
     restart: unless-stopped
     networks:
       - data-platform-net
