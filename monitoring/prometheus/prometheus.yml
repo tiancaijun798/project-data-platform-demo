@@ -1,6 +1,6 @@
 # ==========================================
 # Prometheus 配置
-# 采集目标: 应用健康端点、Airflow metrics、系统指标
+# 采集目标: 应用、Airflow StatsD、自监控
 # ==========================================
 
 global:
@@ -8,26 +8,20 @@ global:
   evaluation_interval: 15s
   scrape_timeout: 10s
 
-# 告警规则
 rule_files:
   - "alerts.yml"
 
-# 采集配置
 scrape_configs:
   # ── 1. Prometheus 自监控 ──
   - job_name: "prometheus"
     static_configs:
       - targets: ["localhost:9090"]
 
-  # ── 2. 应用健康端点 ──
+  # ── 2. FastAPI 应用 Prometheus 指标 ──
   - job_name: "data-platform-app"
-    metrics_path: /health
+    metrics_path: /metrics
     static_configs:
       - targets: ["data-platform-app:8000"]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: "data-platform-app"
 
   # ── 3. Airflow StatsD Exporter ──
   - job_name: "airflow-statsd"
@@ -35,20 +29,17 @@ scrape_configs:
       - targets: ["statsd-exporter:9102"]
     metrics_path: /metrics
 
-  # ── 4. PostgreSQL ──
-  - job_name: "postgres"
-    static_configs:
-      - targets: ["data-platform-db:9187"]
-    metrics_path: /metrics
+  # ── 4. PostgreSQL (需 postgres_exporter 容器，暂未部署) ──
+  # - job_name: "postgres"
+  #   static_configs:
+  #     - targets: ["data-platform-db:9187"]
 
-  # ── 5. Redis ──
-  - job_name: "redis"
-    static_configs:
-      - targets: ["data-platform-cache:9121"]
-    metrics_path: /metrics
+  # ── 5. Redis (需 redis_exporter 容器，暂未部署) ──
+  # - job_name: "redis"
+  #   static_configs:
+  #     - targets: ["data-platform-cache:9121"]
 
-  # ── 6. Docker Host (cAdvisor 或 node_exporter) ──
-  - job_name: "docker-host"
-    static_configs:
-      - targets: ["host.docker.internal:9100"]
-    metrics_path: /metrics
+  # ── 6. Docker Host (需 node_exporter，暂未部署) ──
+  # - job_name: "docker-host"
+  #   static_configs:
+  #     - targets: ["host.docker.internal:9100"]
