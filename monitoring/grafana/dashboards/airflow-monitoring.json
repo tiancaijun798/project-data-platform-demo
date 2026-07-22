@@ -1,8 +1,10 @@
 {
   "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "datasource", "uid": "grafana"}, "enable": true, "hide": true, "name": "Annotations", "type": "dashboard"}]},
+  "description": "Data Platform Demo - Real-time Monitoring Dashboard",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
+  "id": null,
   "links": [],
   "panels": [
     {
@@ -15,10 +17,10 @@
           "unit": "none"
         }
       },
-      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "gridPos": {"h": 4, "w": 5, "x": 0, "y": 0},
       "id": 1,
       "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "textMode": "auto"},
-      "targets": [{"expr": "up{job=\"airflow-statsd\"}", "legendFormat": "Airflow StatsD", "refId": "A"}],
+      "targets": [{"expr": "up{job=\"airflow-statsd\"}", "refId": "A"}],
       "title": "Airflow StatsD",
       "type": "stat"
     },
@@ -31,11 +33,11 @@
           "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
         }
       },
-      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "gridPos": {"h": 4, "w": 5, "x": 5, "y": 0},
       "id": 2,
       "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "textMode": "auto"},
-      "targets": [{"expr": "up{job=\"prometheus\"}", "legendFormat": "Prometheus", "refId": "A"}],
-      "title": "Prometheus",
+      "targets": [{"expr": "up{job=\"data-platform-app\"}", "refId": "A"}],
+      "title": "App Metrics",
       "type": "stat"
     },
     {
@@ -47,11 +49,11 @@
           "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
         }
       },
-      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "gridPos": {"h": 4, "w": 5, "x": 10, "y": 0},
       "id": 3,
       "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "textMode": "auto"},
-      "targets": [{"expr": "up{job=\"data-platform-app\"}", "legendFormat": "App", "refId": "A"}],
-      "title": "Data Platform App",
+      "targets": [{"expr": "up{job=\"prometheus\"}", "refId": "A"}],
+      "title": "Prometheus",
       "type": "stat"
     },
     {
@@ -59,15 +61,31 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1000}, {"color": "red", "value": 10000}]},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
           "unit": "short"
         }
       },
-      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "gridPos": {"h": 4, "w": 5, "x": 15, "y": 0},
       "id": 4,
-      "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "textMode": "auto"},
-      "targets": [{"expr": "scrape_samples_scraped", "legendFormat": "Metrics Collected", "refId": "A"}],
-      "title": "Total Metrics Collected",
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"expr": "scrape_samples_scraped", "refId": "A"}],
+      "title": "Scraped Samples",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
+      "id": 5,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"values": false, "calcs": ["sum"]}, "textMode": "value"},
+      "targets": [{"expr": "sum(http_requests_total)", "refId": "A"}],
+      "title": "Total API Requests",
       "type": "stat"
     },
     {
@@ -75,18 +93,17 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "palette-classic"},
-          "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "auto", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}},
-          "unit": "short"
+          "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "auto", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}},
+          "unit": "reqps"
         }
       },
       "gridPos": {"h": 10, "w": 12, "x": 0, "y": 4},
-      "id": 5,
+      "id": 6,
       "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
       "targets": [
-        {"expr": "scrape_samples_scraped", "legendFormat": "Scraped Metrics", "refId": "A"},
-        {"expr": "prometheus_tsdb_head_samples_appended_total", "legendFormat": "Samples Appended", "refId": "B"}
+        {"expr": "rate(http_requests_total{handler!=\"/metrics\"}[1m])", "legendFormat": "{{handler}} - {{method}}", "refId": "A"}
       ],
-      "title": "Prometheus Metrics Flow (data is flowing!)",
+      "title": "API Request Rate (by endpoint)",
       "type": "timeseries"
     },
     {
@@ -95,30 +112,70 @@
         "defaults": {
           "color": {"mode": "palette-classic"},
           "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "auto", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}},
-          "unit": "s"
+          "unit": "short"
         }
       },
       "gridPos": {"h": 10, "w": 12, "x": 12, "y": 4},
-      "id": 6,
+      "id": 7,
       "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
       "targets": [
-        {"expr": "rate(airflow_serde_load_serializers_sum[5m])", "legendFormat": "Airflow Serde Load Time", "refId": "A"}
+        {"expr": "scrape_samples_scraped", "legendFormat": "Metrics Scraped", "refId": "A"},
+        {"expr": "statsd_exporter_lines_total", "legendFormat": "StatsD Lines", "refId": "B"}
       ],
-      "title": "Airflow Internal Metrics (StatsD data incoming!)",
+      "title": "Data Flow: Prometheus Scraping + StatsD Ingress",
       "type": "timeseries"
     },
     {
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 14},
-      "id": 7,
-      "options": {"content": "# Data Platform Demo - Monitoring Dashboard\n\n## How to see more data\n\n1. Go to **Airflow** (localhost:8080) and trigger `demo_pipeline` multiple times\n2. StatsD metrics will accumulate in Prometheus\n3. The charts above will populate with DAG success rates, task durations, etc.\n\n## Current Status\n\n- **Kafka**: Running (data-kafka:9092)\n- **Airflow**: Running (airflow/airflow)\n- **PostgreSQL**: Running with 9838 events, 3 dbt models\n- **Grafana**: You are here!\n\n## Data Pipeline Stats\n- 9838 user events across 3 days\n- 500 unique users\n- 4 dbt models built (dim_users, dim_products, fct_user_events_daily)\n- 15/15 data quality tests passing\n", "mode": "markdown"},
-      "title": "Documentation",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "auto", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "rate(statsd_exporter_udp_packets_total[1m])", "legendFormat": "UDP Packets/s (from Airflow)", "refId": "A"},
+        {"expr": "statsd_exporter_lines_total", "legendFormat": "Total StatsD Lines", "refId": "B"}
+      ],
+      "title": "Airflow StatsD Telemetry (UDP packets from Airflow to Prometheus)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto", "drawStyle": "bars", "fillOpacity": 80, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "normal"}},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "increase(http_requests_total{handler!=\"/metrics\"}[5m])", "legendFormat": "{{handler}} ({{status}})", "refId": "A"}
+      ],
+      "title": "API Requests (last 5min, by endpoint)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 22},
+      "id": 10,
+      "options": {
+        "content": "## Data Platform Demo - System Status\n\n| Service | Status | Endpoint |\n|---------|--------|----------|\n| Airflow | Running | localhost:8080 |\n| FastAPI | Running | localhost:8000 |\n| Kafka | Running | localhost:9092 |\n| PostgreSQL | Running | localhost:5432 |\n| Redis | Running | localhost:6379 |\n| Prometheus | Running | localhost:9090 |\n| Grafana | Running | localhost:3000 |\n\n**Data Pipeline**: 9,838 events x 500 users x 3 days x 15 quality tests all passing\n\n**GitHub**: https://github.com/tiancaijun798/project-data-platform-demo",
+        "mode": "markdown"
+      },
+      "title": "",
       "type": "text"
     }
   ],
   "refresh": "10s",
   "schemaVersion": 39,
-  "tags": ["data-platform", "airflow", "monitoring", "demo"],
+  "tags": ["data-platform", "monitoring", "demo"],
   "templating": {
     "list": [{"current": {"text": "Prometheus", "value": "Prometheus"}, "hide": 0, "label": "Prometheus", "name": "DS_PROMETHEUS", "query": "prometheus", "type": "datasource"}]
   },

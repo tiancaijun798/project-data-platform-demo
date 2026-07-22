@@ -49,7 +49,7 @@ async def user_stats():
     """返回用户统计数据"""
     import psycopg2
     conn = psycopg2.connect(
-        host="localhost", port=5432, user="admin", password="changeme", dbname="data_platform"
+        host="data-platform-db", port=5432, user="admin", password="changeme", dbname="data_platform"
     )
     cur = conn.cursor()
     cur.execute("SELECT user_segment, COUNT(*) as cnt, SUM(total_events) as events FROM public_clean.dim_users GROUP BY user_segment ORDER BY cnt DESC")
@@ -63,7 +63,7 @@ async def event_stats():
     """返回事件统计数据"""
     import psycopg2
     conn = psycopg2.connect(
-        host="localhost", port=5432, user="admin", password="changeme", dbname="data_platform"
+        host="data-platform-db", port=5432, user="admin", password="changeme", dbname="data_platform"
     )
     cur = conn.cursor()
     cur.execute("SELECT event_type, SUM(total_events) as cnt FROM public_clean.fct_user_events_daily GROUP BY event_type ORDER BY cnt DESC")
