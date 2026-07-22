@@ -7,7 +7,21 @@ version: '3.9'
 
 services:
 
-  # ---- 示例 Python 应用 ----
+  # ---- React 前端 ----
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: data-platform-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+  # ---- Python 后端 ----
   app:
     build:
       context: ..
