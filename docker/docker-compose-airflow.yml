@@ -23,6 +23,7 @@ services:
       - ../src:/opt/airflow/src
       - ../data:/opt/airflow/data
       - ../scripts:/opt/airflow/scripts
+      - ../dbt:/opt/airflow/dbt
     networks:
       - airflow-net
       - data-platform-net
@@ -52,6 +53,7 @@ services:
       - ../src:/opt/airflow/src
       - ../data:/opt/airflow/data
       - ../scripts:/opt/airflow/scripts
+      - ../dbt:/opt/airflow/dbt
     networks:
       - airflow-net
       - data-platform-net
@@ -76,6 +78,7 @@ services:
       - ../src:/opt/airflow/src
       - ../data:/opt/airflow/data
       - ../scripts:/opt/airflow/scripts
+      - ../dbt:/opt/airflow/dbt
     networks:
       - airflow-net
       - data-platform-net
@@ -100,6 +103,7 @@ services:
       - ../src:/opt/airflow/src
       - ../data:/opt/airflow/data
       - ../scripts:/opt/airflow/scripts
+      - ../dbt:/opt/airflow/dbt
     networks:
       - airflow-net
       - data-platform-net

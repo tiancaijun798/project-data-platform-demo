@@ -19,7 +19,7 @@ from airflow.utils.trigger_rule import TriggerRule
 
 
 PROJECT_ROOT = "/opt/airflow"
-DBT_DIR = f"{PROJECT_ROOT}/../dbt"
+DBT_DIR = f"{PROJECT_ROOT}/dbt"
 
 default_args = {
     "owner": "data-platform",
@@ -31,23 +31,24 @@ default_args = {
 
 
 def _check_dbt_env(**context):
-    """检查 dbt 环境是否可用。"""
+    """检查 dbt 环境是否可用，不可用则跳过后续任务。"""
     import subprocess
-    import sys
 
     try:
         result = subprocess.run(
             ["dbt", "--version"],
             capture_output=True,
             text=True,
-            cwd="/opt/airflow/../dbt",
+            cwd="/opt/airflow/dbt",
         )
         print(result.stdout)
         if result.returncode != 0:
+            print("⚠️  dbt --version 返回非零，跳过 dbt 任务")
             raise RuntimeError("dbt 不可用")
+        print("✅ dbt 环境就绪")
     except FileNotFoundError:
-        print("⚠️  dbt 未安装，跳过本 DAG")
-        raise
+        print("⚠️  dbt 未安装（需要 pip install dbt-postgres），跳过 dbt 任务")
+        raise RuntimeError("dbt 未安装")
 
 
 with DAG(

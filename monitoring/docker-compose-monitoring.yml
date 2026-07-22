@@ -29,7 +29,7 @@ services:
       retries: 3
 
   grafana:
-    image: grafana/grafana:11.1.0
+    image: grafana/grafana:latest
     container_name: data-mon-grafana
     ports:
       - "3000:3000"
