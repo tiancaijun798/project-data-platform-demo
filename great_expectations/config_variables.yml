@@ -1,0 +1,5 @@
+# ==========================================
+# GE 配置变量 — 从环境变量读取
+# 复制为 config_variables.yml 并填入真实值
+# ==========================================
+db_connection_string: "postgresql://admin:changeme@localhost:5432/data_platform"

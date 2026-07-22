@@ -32,7 +32,10 @@ KAFKA_BOOTSTRAP = "kafka:29092"  # Docker 内部网络地址
 KAFKA_TOPIC = "events"
 EVENT_COUNT = 100
 
-# Ubuntu VM SSH 配置（PySpark 在 VM 内执行，仅当需要远端执行时使用）
+# PySpark 执行模式: "local" 在容器内本地执行 / "remote" 通过 SSH 到 VM
+SPARK_MODE = os.environ.get("SPARK_MODE", "local")
+
+# Ubuntu VM SSH 配置（仅 SPARK_MODE=remote 时使用）
 VM_HOST = os.environ.get("VM_HOST", "")
 VM_PORT = os.environ.get("VM_PORT", "2222")
 VM_USER = os.environ.get("VM_USER", "")
@@ -162,23 +165,21 @@ with DAG(
         python_callable=_check_data_file,
     )
 
-    # ---- Task 5: PySpark 清洗转换 (优先本地执行，VM 备选) ----
+    # ---- Task 5: PySpark 清洗转换 (根据 SPARK_MODE 选择执行方式) ----
     spark_process = BashOperator(
         task_id="spark_process",
         bash_command=(
-            f"echo '=== PySpark Process Start ===' && "
-            f"if [ -n \"{VM_HOST}\" ] && [ -n \"{VM_USER}\" ] && [ -n \"{VM_PASS}\" ]; then "
+            f"echo '=== PySpark Process Start (mode: {SPARK_MODE}) ===' && "
+            f"if [ \"{SPARK_MODE}\" = \"remote\" ] && [ -n \"{VM_HOST}\" ] && [ -n \"{VM_USER}\" ]; then "
             f"  echo '  -> 远端执行: {VM_USER}@{VM_HOST}' && "
             f"  sshpass -p '{VM_PASS}' ssh -o StrictHostKeyChecking=no "
             f"  -p {VM_PORT} {VM_USER}@{VM_HOST} "
             f"  'cd ~/project-data-platform-demo && "
             f"  python src/spark/process_data.py "
             f"  --input data/input.jsonl --output data/output_parquet' "
-            f"  || echo '⚠️  远端执行失败，尝试本地执行' && "
-            f"  PYTHONUTF8=1 python {SPARK_DIR}/process_data.py "
-            f"  --input {DATA_DIR}/input.jsonl --output {DATA_DIR}/output_parquet; "
+            f"  || echo '⚠️  远端执行失败'; "
             f"else "
-            f"  echo '  -> 本地执行（未配置 VM_HOST）' && "
+            f"  echo '  -> 本地容器内执行' && "
             f"  PYTHONUTF8=1 python {SPARK_DIR}/process_data.py "
             f"  --input {DATA_DIR}/input.jsonl --output {DATA_DIR}/output_parquet; "
             f"fi"

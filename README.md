@@ -226,7 +226,54 @@ bash scripts/check_env.sh
 
 ---
 
+## 🔑 必需环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `DATA_PLATFORM_DB_HOST` | `data-platform-db` | PostgreSQL 主机 |
+| `DATA_PLATFORM_DB_PORT` | `5432` | PostgreSQL 端口 |
+| `DATA_PLATFORM_DB_USER` | `admin` | 数据库用户 |
+| `DATA_PLATFORM_DB_PASSWORD` | `changeme` | **生产环境务必修改！** |
+| `DATA_PLATFORM_DB_NAME` | `data_platform` | 数据库名 |
+| `SPARK_MODE` | `local` | `local`=容器内执行 / `remote`=SSH 到 VM |
+| `VM_HOST` | — | Spark 远端执行 VM 地址（仅 remote 模式） |
+| `VM_USER` | — | VM SSH 用户 |
+| `VM_PASS` | — | VM SSH 密码（**生产用密钥！**） |
+
+复制 `.env.example` 为 `.env` 并修改：
+
+```bash
+cp .env.example .env
+# 编辑 .env 填入你的配置
+```
+
+---
+
+## 🚨 常见问题排查
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| Airflow 无法连接数据库 | `airflow-postgres` 容器未启动 | `docker compose -f docker-compose-airflow.yml up -d airflow-postgres airflow-redis` |
+| `generate_events` 失败 | Kafka 未运行 | `docker compose -f docker-compose-kafka.yml up -d` |
+| `check_dbt_env` 显示 "dbt 未安装" | 正常现象，dbt 在宿主机运行 | 不影响，已在宿主机配置好 |
+| Grafana 无数据 | Prometheus 目标离线 | 检查 `http://localhost:9090/targets` |
+| Prometheus targets DOWN | 缺少 exporter 容器 | 目前只需 airflow-statsd + prometheus + app 三个 UP |
+| API `/api/stats/*` 500 错误 | 数据库连接失败 | 确认 `data-platform-db` 容器运行中，检查环境变量 |
+| Parquet 输出为空 | 源数据缺失 | 运行 `python scripts/generate_real_data.py` 生成测试数据 |
+
+---
+
 ## 🧪 运行测试
+
+```bash
+# 单元测试
+python -m pytest tests/ -v
+
+# 数据库初始化
+bash scripts/init_database.sh
+
+# dbt 编译验证
+cd dbt && PYTHONUTF8=1 dbt compile
 
 ```bash
 # Python lint
@@ -276,4 +323,4 @@ bash scripts/one_click_reset.sh --hard
 
 ---
 
-*项目创建: 2026-07-20 | 4周规划完成: 2026-07-22 | 维护者: tiancaijun798*
+*项目创建: 2026-07-20 | 4周规划完成: 2026-07-22 | 维护者: 戴骏杰*

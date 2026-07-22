@@ -12,7 +12,7 @@ datasources:
     class_name: Datasource
     execution_engine:
       class_name: SqlAlchemyExecutionEngine
-      connection_string: "postgresql://admin:changeme@localhost:5432/data_platform"
+      connection_string: ${DATA_PLATFORM_DB_CONNECTION_STRING:-"postgresql://${DATA_PLATFORM_DB_USER:-admin}:${DATA_PLATFORM_DB_PASSWORD:-changeme}@${DATA_PLATFORM_DB_HOST:-localhost}:${DATA_PLATFORM_DB_PORT:-5432}/${DATA_PLATFORM_DB_NAME:-data_platform}"}
     data_connectors:
       default_runtime_data_connector_name:
         class_name: RuntimeDataConnector

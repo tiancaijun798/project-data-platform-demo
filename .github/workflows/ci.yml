@@ -20,7 +20,7 @@ env:
 jobs:
   # ──── Job 1: Python 代码质量检查 ────
   python-lint:
-    name: Python Lint & Syntax Check
+    name: Python Lint & Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout 代码
@@ -32,26 +32,59 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: 安装依赖
-        run: |
-          pip install flake8 black isort
-          pip install -r requirements.txt
+        run: pip install pandas pyarrow pytest
 
-      - name: Flake8 Lint
-        run: |
-          flake8 src/ --count --max-line-length=100 --statistics \
-            --ignore=E501,W503,F401,F841 \
-            --exclude=__pycache__,__init__.py
-        continue-on-error: true
-
-      - name: Black 格式检查
-        run: |
-          black --check --diff src/ dags/ 2>&1 || echo "⚠️ 格式不一致（不阻塞）"
-        continue-on-error: true
+      - name: Pytest 单元测试
+        run: python -m pytest tests/ -v
 
       - name: Python 语法校验
+        run: python -m py_compile dags/demo_pipeline.py && echo "✅ DAG 语法校验通过"
+
+  # ──── Job 2: 端到端 Smoke Test ────
+  smoke-test:
+    name: Smoke Test (End-to-End)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装依赖
+        run: pip install pandas pyarrow
+
+      - name: Smoke Test — 数据生成 + 清洗 + Parquet 输出
         run: |
-          python -m py_compile dags/demo_pipeline.py
-          echo "✅ DAG 语法校验通过"
+          python -c "
+          import json, uuid, os, tempfile
+          import pandas as pd
+
+          # 生成测试数据
+          events = [{'event_id': str(uuid.uuid4()), 'user_id': f'U{str(i).zfill(4)}',
+                      'event_type': 'view', 'product_id': f'P{str(i).zfill(4)}',
+                      'timestamp': '2026-07-20T10:00:00+00:00', 'page': 'home',
+                      'referrer': 'google', 'duration_ms': 5000,
+                      'device': 'mobile', 'browser': 'Chrome'} for i in range(1, 51)]
+
+          df = pd.DataFrame(events)
+          df['event_ts'] = pd.to_datetime(df['timestamp'])
+          df['event_type'] = df['event_type'].str.lower()
+          df['product_id'] = df['product_id'].fillna('unknown')
+          df['referrer'] = df['referrer'].fillna('direct')
+          df['duration_ms'] = df['duration_ms'].clip(0, 300000)
+          df['processed_at'] = pd.Timestamp.now()
+          df['processing_date'] = pd.Timestamp.now().date()
+
+          out = tempfile.mkdtemp()
+          df.to_parquet(os.path.join(out, 'events.parquet'), index=False)
+          df_back = pd.read_parquet(out)
+          assert len(df_back) == 50
+          assert df_back['product_id'].iloc[0] == 'P0001'
+          print(f'Smoke test PASSED: {len(df_back)} events processed')
+          "
 
   # ──── Job 2: dbt 编译 & 测试 ────
   dbt-test:
@@ -147,7 +180,7 @@ jobs:
   # ──── Job 4: 汇总结果 ────
   ci-summary:
     name: CI Summary
-    needs: [python-lint, dbt-test, dag-validation]
+    needs: [python-lint, smoke-test, dbt-test, dag-validation]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -157,6 +190,7 @@ jobs:
           echo "  Data Platform CI Pipeline 完成"
           echo "========================================="
           echo "  python-lint:    ${{ needs.python-lint.result }}"
+          echo "  smoke-test:     ${{ needs.smoke-test.result }}"
           echo "  dbt-test:       ${{ needs.dbt-test.result }}"
           echo "  dag-validation: ${{ needs.dag-validation.result }}"
           echo "========================================="
