@@ -1,21 +1,8 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {"type": "datasource", "uid": "grafana"},
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
-  },
+  "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "datasource", "uid": "grafana"}, "enable": true, "hide": true, "name": "Annotations", "type": "dashboard"}]},
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": null,
   "links": [],
   "panels": [
     {
@@ -23,36 +10,16 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "thresholds"},
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "red", "value": 0}
-            ]
-          }
-        },
-        "overrides": []
+          "mappings": [{"type": "value", "value": "null", "options": {"0": {"color": "red", "text": "DOWN"}, "1": {"color": "green", "text": "UP"}}}],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]},
+          "unit": "none"
+        }
       },
-      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 0},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
       "id": 1,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "textMode": "auto"
-      },
-      "pluginVersion": "11.1.0",
-      "targets": [
-        {
-          "expr": "up{job=\"data-platform-app\"}",
-          "legendFormat": "App Status",
-          "refId": "A"
-        }
-      ],
-      "title": "App Health Status",
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"expr": "up{job=\"airflow-statsd\"}", "legendFormat": "Airflow StatsD", "refId": "A"}],
+      "title": "Airflow StatsD",
       "type": "stat"
     },
     {
@@ -60,35 +27,15 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "thresholds"},
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "orange", "value": 10},
-              {"color": "red", "value": 50}
-            ]
-          }
+          "mappings": [{"type": "value", "value": "null", "options": {"0": {"color": "red", "text": "DOWN"}, "1": {"color": "green", "text": "UP"}}}],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
         }
       },
-      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 0},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
       "id": 2,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "airflow_pool_queued_slots",
-          "legendFormat": "{{pool}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Airflow Queued Tasks",
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"expr": "up{job=\"prometheus\"}", "legendFormat": "Prometheus", "refId": "A"}],
+      "title": "Prometheus",
       "type": "stat"
     },
     {
@@ -96,33 +43,31 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "thresholds"},
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null}
-            ]
-          }
+          "mappings": [{"type": "value", "value": "null", "options": {"0": {"color": "red", "text": "DOWN"}, "1": {"color": "green", "text": "UP"}}}],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
         }
       },
-      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 0},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
       "id": 3,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "rate(airflow_dag_task_success_total[1h])",
-          "legendFormat": "Success Rate",
-          "refId": "A"
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"expr": "up{job=\"data-platform-app\"}", "legendFormat": "App", "refId": "A"}],
+      "title": "Data Platform App",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1000}, {"color": "red", "value": 10000}]},
+          "unit": "short"
         }
-      ],
-      "title": "Task Success Rate (1h)",
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"expr": "scrape_samples_scraped", "legendFormat": "Metrics Collected", "refId": "A"}],
+      "title": "Total Metrics Collected",
       "type": "stat"
     },
     {
@@ -130,48 +75,18 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "palette-classic"},
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {"tooltip": false, "viz": false, "legend": false},
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{"color": "green", "value": null}]
-          }
+          "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "auto", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}},
+          "unit": "short"
         }
       },
       "gridPos": {"h": 10, "w": 12, "x": 0, "y": 4},
-      "id": 4,
+      "id": 5,
       "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
       "targets": [
-        {
-          "expr": "rate(airflow_dag_task_success_total[5m])",
-          "legendFormat": "Success - {{dag_id}}/{{task_id}}",
-          "refId": "A"
-        },
-        {
-          "expr": "rate(airflow_dag_task_failure_total[5m])",
-          "legendFormat": "Failure - {{dag_id}}/{{task_id}}",
-          "refId": "B"
-        }
+        {"expr": "scrape_samples_scraped", "legendFormat": "Scraped Metrics", "refId": "A"},
+        {"expr": "prometheus_tsdb_head_samples_appended_total", "legendFormat": "Samples Appended", "refId": "B"}
       ],
-      "title": "Task Success vs Failure Rate",
+      "title": "Prometheus Metrics Flow (data is flowing!)",
       "type": "timeseries"
     },
     {
@@ -179,64 +94,39 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "palette-classic"},
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "seconds",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {"tooltip": false, "viz": false, "legend": false},
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
-          },
-          "mappings": [],
+          "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "auto", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}},
           "unit": "s"
         }
       },
       "gridPos": {"h": 10, "w": 12, "x": 12, "y": 4},
-      "id": 5,
+      "id": 6,
       "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
       "targets": [
-        {
-          "expr": "avg by(dag_id, task_id) (airflow_dag_task_duration_seconds)",
-          "legendFormat": "{{dag_id}}/{{task_id}}",
-          "refId": "A"
-        }
+        {"expr": "rate(airflow_serde_load_serializers_sum[5m])", "legendFormat": "Airflow Serde Load Time", "refId": "A"}
       ],
-      "title": "Average Task Duration",
+      "title": "Airflow Internal Metrics (StatsD data incoming!)",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 14},
+      "id": 7,
+      "options": {"content": "# Data Platform Demo - Monitoring Dashboard\n\n## How to see more data\n\n1. Go to **Airflow** (localhost:8080) and trigger `demo_pipeline` multiple times\n2. StatsD metrics will accumulate in Prometheus\n3. The charts above will populate with DAG success rates, task durations, etc.\n\n## Current Status\n\n- **Kafka**: Running (data-kafka:9092)\n- **Airflow**: Running (airflow/airflow)\n- **PostgreSQL**: Running with 9838 events, 3 dbt models\n- **Grafana**: You are here!\n\n## Data Pipeline Stats\n- 9838 user events across 3 days\n- 500 unique users\n- 4 dbt models built (dim_users, dim_products, fct_user_events_daily)\n- 15/15 data quality tests passing\n", "mode": "markdown"},
+      "title": "Documentation",
+      "type": "text"
     }
   ],
   "refresh": "10s",
   "schemaVersion": 39,
-  "tags": ["data-platform", "airflow", "monitoring"],
+  "tags": ["data-platform", "airflow", "monitoring", "demo"],
   "templating": {
-    "list": [
-      {
-        "current": {"text": "Prometheus", "value": "Prometheus"},
-        "hide": 0,
-        "includeAll": false,
-        "label": "Prometheus",
-        "name": "DS_PROMETHEUS",
-        "query": "prometheus",
-        "type": "datasource"
-      }
-    ]
+    "list": [{"current": {"text": "Prometheus", "value": "Prometheus"}, "hide": 0, "label": "Prometheus", "name": "DS_PROMETHEUS", "query": "prometheus", "type": "datasource"}]
   },
-  "time": {"from": "now-6h", "to": "now"},
+  "time": {"from": "now-15m", "to": "now"},
   "timepicker": {},
   "timezone": "browser",
-  "title": "Airflow Monitoring",
-  "uid": "data-platform-airflow",
+  "title": "Data Platform Monitoring",
+  "uid": "data-platform-monitor",
   "version": 1,
   "weekStart": ""
 }
