@@ -16,13 +16,33 @@
         │                   │                      │
         └───────────────────┼──────────────────────┘
                             │
-              ┌─────────────┼─────────────┐
-              │             │             │
-        ┌─────▼────┐ ┌─────▼─────┐ ┌─────▼──────┐
-        │ dbt 建模  │ │ Great Expec│ │ Prometheus  │
-        │ (数据分层) │ │ (质量校验) │ │ + Grafana   │
-        └──────────┘ └───────────┘ └────────────┘
+    ┌───────────────────────┼───────────────────────────┐
+    │                       │                           │
+┌───▼──────┐  ┌─────────▼────┐  ┌──────────▼────┐  ┌───▼──────────┐
+│ dbt 建模  │  │ Great Expect │  │ Prometheus    │  │ FastAPI API  │
+│ (数据分层) │  │ (质量校验)    │  │ + Grafana     │  │ (数据产品)    │
+└───┬──────┘  └──────────────┘  └───────────────┘  └───┬──────────┘
+    │                                                   │
+    └───────────┬───────────────────────────────────────┘
+                │
+    ┌───────────┼───────────────────────────┐
+    │           │                           │
+┌───▼────┐ ┌───▼────────┐ ┌───────────▼────┐ ┌────────────▼───┐
+│ Feast  │ │ Milvus     │ │ MLflow        │ │ RAG / FAISS    │
+│ 特征存储│ │ 向量数据库  │ │ 实验跟踪       │ │ 知识库检索      │
+└────────┘ └────────────┘ └───────────────┘ └────────────────┘
 ```
+
+### AI/ML 能力矩阵（对接 AI 大数据工程师岗位要求）
+
+| 能力域 | 组件 | 技术 | 说明 |
+|--------|------|------|------|
+| **向量检索** | `demo_vector/` | Milvus + sentence-transformers | 语义搜索、NL→SQL、embedding pipeline |
+| **特征平台** | `feast/` | Feast + PostgreSQL | 离线/在线特征一致性、OnDemandFeatureView |
+| **实验跟踪** | `mlflow/` | MLflow + scikit-learn | 模型训练、参数记录、Model Registry |
+| **RAG 知识库** | `rag_demo/` | FAISS + sentence-transformers | 文档分块、语义检索、Prompt 构建 |
+| **数据血缘** | `lineage/` | dbt manifest + Mermaid.js | 表级/列级血缘可视化 |
+| **性能基准** | `benchmarks/` | Pandas/DuckDB/Milvus | Parquet查询、向量检索、embedding吞吐 |
 
 ---
 
@@ -46,6 +66,12 @@
 | **CI/CD** | GitHub Actions | — |
 | **API 框架** | FastAPI | 0.115+ |
 | **数据库** | PostgreSQL 16 + Redis 7 | — |
+| **向量数据库** | Milvus (分布式向量检索) | 2.4.0 |
+| **特征平台** | Feast (离线/在线特征存储) | 0.40+ |
+| **实验跟踪** | MLflow (模型训练 & 注册表) | 2.14+ |
+| **向量索引** | FAISS (轻量级本地检索) | 1.8+ |
+| **知识库/RAG** | sentence-transformers + FAISS | 2.7+ |
+| **数据血缘** | Mermaid.js 可视化 | — |
 | **CLI 工具** | Git, kubectl, Helm | 2.54 / 1.34 / 3.19 |
 | **开发语言** | Python + Conda | 3.13 / 25.5 |
 | **代码托管** | GitHub | HTTPS + PAT |
@@ -130,7 +156,36 @@ project-data-platform-demo/
 ├── notebooks/                         # Jupyter 数据分析 Notebook
 ├── plugins/                           # Airflow 插件
 ├── data/                              # 数据文件 (.gitignore 排除)
-└── logs/                              # 运行日志 (.gitignore 排除)
+├── logs/                              # 运行日志 (.gitignore 排除)
+│
+├── demo_vector/                       # 🆕 Milvus 向量检索 demo
+│   ├── docker-compose.vector.yml      # Milvus + etcd + MinIO
+│   ├── embed.py                       # Embedding 生成 & 入库
+│   ├── query_api.py                   # FastAPI 语义检索 API
+│   └── README.md
+│
+├── feast/                             # 🆕 Feast 特征平台
+│   ├── feature_repo/                  # 特征仓库 (FeatureViews)
+│   ├── run_feast_demo.py              # 离线/在线特征演示
+│   └── README.md
+│
+├── mlflow/                            # 🆕 MLflow 实验跟踪
+│   ├── docker-compose.mlflow.yml      # MLflow Tracking Server
+│   ├── train_demo.py                  # 模型训练 & MLflow 记录
+│   └── README.md
+│
+├── rag_demo/                          # 🆕 RAG 知识库检索
+│   ├── build_knowledge_base.py        # FAISS 索引构建
+│   ├── rag_server.py                  # FastAPI 检索 + Prompt API
+│   └── README.md
+│
+├── lineage/                           # 🆕 数据血缘可视化
+│   ├── generate_lineage.py            # 血缘图生成器
+│   └── lineage_output/                # Mermaid HTML/MD 输出
+│
+└── benchmarks/                        # 🆕 性能基准测试
+    ├── run_benchmarks.py              # 综合性能基准脚本
+    └── results/                       # 基准测试结果
 ```
 
 ---
@@ -150,14 +205,20 @@ cd project-data-platform-demo
 
 ### 2. 一键启动全部服务
 ```bash
-# Linux / Mac
+# Linux / Mac — 完整模式
 bash scripts/one_click_start.sh
+
+# 轻量模式（仅核心服务，启动更快）
+bash scripts/one_click_light.sh
+
+# 含 AI/ML 组件
+bash scripts/one_click_start.sh --monitoring --ml --vector
 
 # Windows (Git Bash)
 bash scripts/one_click_start_windows.sh
 
-# 含监控服务
-bash scripts/one_click_start.sh --monitoring
+# Windows (PowerShell)
+.\start_project.ps1
 ```
 
 ### 3. 环境检测
@@ -174,6 +235,10 @@ bash scripts/check_env.sh
 | **FastAPI Docs** | http://localhost:8000/docs | — |
 | **Grafana** | http://localhost:3000 | admin / admin |
 | **Prometheus** | http://localhost:9090 | — |
+| **MLflow** | http://localhost:5000 | — |
+| **Embedding API** | http://localhost:8001/docs | — |
+| **RAG API** | http://localhost:8002/docs | — |
+| **Data Lineage** | `lineage/lineage_output/lineage.html` | — |
 
 ### 5. 触发数据流水线
 1. 浏览器打开 http://localhost:8080
@@ -211,6 +276,20 @@ bash scripts/check_env.sh
 - [x] Day18 — 开源 PR 备选方向整理
 - [x] Day19 — 项目演示材料
 - [x] Day20 — 知识点复盘
+
+### 🆕 第5周：AI 数据基础设施升级 ✅
+- [x] Day21 — Milvus 向量数据库集成 + embedding pipeline
+- [x] Day22 — Feast 特征平台 (离线/在线特征存储)
+- [x] Day23 — MLflow 实验跟踪 + 模型训练 demo
+- [x] Day24 — RAG 知识库检索 (FAISS + Prompt 构建)
+- [x] Day25 — 数据血缘可视化 (Mermaid.js)
+
+### 🆕 第6周：工程化打磨 ✅
+- [x] Day26 — CI 全面升级 (GE 校验 + 集成测试 + DAG 结构验证)
+- [x] Day27 — 性能基准测试套件 (Parquet/向量/Embedding)
+- [x] Day28 — 轻量一键启动脚本
+- [x] Day29 — 全部模块 README 文档化
+- [x] Day30 — 项目升级汇总 & 面试材料准备
 
 ---
 

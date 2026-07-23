@@ -1,0 +1,5 @@
+# Feast Feature Store — Python Dependencies
+feast>=0.40.0
+psycopg2-binary>=2.9.0
+sqlalchemy>=2.0.0
+pandas>=2.2.0

@@ -1,0 +1,15 @@
+project: data_platform_demo
+provider: local
+registry: data/registry.db
+online_store:
+  type: sqlite
+  path: data/online_store.db
+offline_store:
+  type: postgres
+  host: localhost
+  port: 5432
+  database: data_platform
+  db_schema: public_clean
+  user: admin
+  password: changeme
+entity_key_serialization_version: 2

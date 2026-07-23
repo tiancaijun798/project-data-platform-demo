@@ -1,0 +1,48 @@
+# ==========================================
+# MLflow Tracking Server
+# 实验跟踪 + 模型注册表
+# ==========================================
+
+services:
+  mlflow-server:
+    image: python:3.11-slim
+    container_name: data-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+      - ./train_demo.py:/app/train_demo.py:ro
+    environment:
+      MLFLOW_TRACKING_URI: http://0.0.0.0:5000
+      MLFLOW_BACKEND_STORE_URI: postgresql://admin:changeme@data-platform-db:5432/data_platform
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+      DATA_PLATFORM_DB_HOST: data-platform-db
+      DATA_PLATFORM_DB_PORT: "5432"
+      DATA_PLATFORM_DB_USER: admin
+      DATA_PLATFORM_DB_PASSWORD: changeme
+      DATA_PLATFORM_DB_NAME: data_platform
+    command: >
+      bash -c "
+        pip install -q mlflow psycopg2-binary scikit-learn pandas sqlalchemy &&
+        mlflow server
+          --host 0.0.0.0
+          --port 5000
+          --backend-store-uri postgresql://admin:changeme@data-platform-db:5432/data_platform
+          --default-artifact-root /mlflow/artifacts
+      "
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  data-platform-net:
+    external: true
+
+volumes:
+  mlflow_artifacts:
+    name: mlflow-artifacts

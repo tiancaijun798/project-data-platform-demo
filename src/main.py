@@ -233,34 +233,31 @@ async def funnel():
 
 @app.get("/api/stats/services")
 async def services():
-    """服务健康状态。"""
-    import subprocess
+    """服务健康状态（通过 TCP 端口检测）。"""
+    import socket
 
     svcs = [
-        ("Airflow", 8080, "http://localhost:8080"),
-        ("FastAPI", 8000, "http://localhost:8000/docs"),
-        ("Grafana", 3000, "http://localhost:3000"),
-        ("Prometheus", 9090, "http://localhost:9090"),
-        ("PostgreSQL", 5432, "localhost:5432"),
-        ("Redis", 6379, "localhost:6379"),
-        ("Kafka", 9092, "localhost:9092"),
+        ("Airflow", 8080, "http://localhost:8080", True),
+        ("FastAPI", 8000, "http://localhost:8000/docs", True),
+        ("Grafana", 3000, "http://localhost:3000", True),
+        ("Prometheus", 9090, "http://localhost:9090", True),
+        ("PostgreSQL", 5432, "postgresql://admin@localhost:5432/data_platform", False),
+        ("Redis", 6379, "redis://localhost:6379", False),
+        ("Kafka", 9092, "kafka://localhost:9092", False),
     ]
 
     result = []
-    for name, port, url in svcs:
-        status = "unknown"
+    for name, port, url, is_web in svcs:
+        status = "stopped"
         try:
-            r = subprocess.run(
-                f"docker ps --format '{{{{.Status}}}}' --filter publish={port}",
-                shell=True, capture_output=True, text=True, timeout=5
-            )
-            if "Up" in r.stdout:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            if sock.connect_ex(("host.docker.internal", port)) == 0:
                 status = "running"
-            elif r.stdout.strip():
-                status = "stopped"
+            sock.close()
         except Exception:
             pass
-        result.append({"name": name, "port": port, "url": url, "status": status})
+        result.append({"name": name, "port": port, "url": url, "status": status, "is_web": is_web})
     return {"data": result}
 
 

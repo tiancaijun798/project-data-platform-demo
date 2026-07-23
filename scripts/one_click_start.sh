@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # 一键启动脚本 — 启动全部数据平台服务
-# 用法: bash scripts/one_click_start.sh [--monitoring]
+# 用法: bash scripts/one_click_start.sh [--monitoring] [--ml] [--vector]
 # ============================================================
 set -e
 
@@ -9,6 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKER_DIR="$PROJECT_ROOT/docker"
 MONITORING_DIR="$PROJECT_ROOT/monitoring"
+MLFLOW_DIR="$PROJECT_ROOT/mlflow"
+VECTOR_DIR="$PROJECT_ROOT/demo_vector"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -16,9 +18,17 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 START_MONITORING=false
-if [ "$1" = "--monitoring" ] || [ "$1" = "-m" ]; then
-    START_MONITORING=true
-fi
+START_ML=false
+START_VECTOR=false
+
+for arg in "$@"; do
+    case $arg in
+        --monitoring|-m) START_MONITORING=true ;;
+        --ml|--mlflow)   START_ML=true ;;
+        --vector|-v)     START_VECTOR=true ;;
+        --all)           START_MONITORING=true; START_ML=true; START_VECTOR=true ;;
+    esac
+done
 
 echo ""
 echo -e "${CYAN}========================================"
@@ -43,13 +53,48 @@ docker compose -f docker-compose-airflow.yml up -d
 echo -e "${GREEN}  ✅ Airflow (webserver + scheduler + worker + triggerer)${NC}"
 
 # ---- Step 4 (可选): 启动监控 ----
+STEP=4
+TOTAL=4
+[ "$START_ML" = true ] && TOTAL=$((TOTAL + 1))
+[ "$START_VECTOR" = true ] && TOTAL=$((TOTAL + 1))
+
 if [ "$START_MONITORING" = true ]; then
-    echo -e "\n${CYAN}[4/4] 启动 Prometheus + Grafana 监控...${NC}"
+    echo -e "\n${CYAN}[${STEP}/${TOTAL}] 启动 Prometheus + Grafana 监控...${NC}"
     cd "$MONITORING_DIR"
     docker compose -f docker-compose-monitoring.yml up -d
     echo -e "${GREEN}  ✅ Prometheus + Grafana${NC}"
 else
-    echo -e "\n${CYAN}[4/4] 跳过监控服务 (使用 --monitoring 启用)${NC}"
+    echo -e "\n${CYAN}[${STEP}/${TOTAL}] 跳过监控服务 (使用 --monitoring 启用)${NC}"
+fi
+STEP=$((STEP + 1))
+
+# ---- Step 5 (可选): 启动 MLflow ----
+if [ "$START_ML" = true ]; then
+    echo -e "\n${CYAN}[${STEP}/${TOTAL}] 启动 MLflow 实验跟踪...${NC}"
+    if [ -f "$MLFLOW_DIR/docker-compose.mlflow.yml" ]; then
+        cd "$MLFLOW_DIR"
+        docker compose -f docker-compose.mlflow.yml up -d
+        echo -e "${GREEN}  ✅ MLflow Server (http://localhost:5000)${NC}"
+    else
+        echo -e "${RED}  ⚠️  MLflow compose 文件未找到${NC}"
+    fi
+else
+    echo -e "\n${CYAN}[${STEP}/${TOTAL}] 跳过 MLflow (使用 --ml 启用)${NC}"
+fi
+STEP=$((STEP + 1))
+
+# ---- Step 6 (可选): 启动向量检索 ----
+if [ "$START_VECTOR" = true ]; then
+    echo -e "\n${CYAN}[${STEP}/${TOTAL}] 启动 Milvus 向量检索服务...${NC}"
+    if [ -f "$VECTOR_DIR/docker-compose.vector.yml" ]; then
+        cd "$VECTOR_DIR"
+        docker compose -f docker-compose.vector.yml up -d
+        echo -e "${GREEN}  ✅ Milvus + Embedding API${NC}"
+    else
+        echo -e "${RED}  ⚠️  Vector compose 文件未找到${NC}"
+    fi
+else
+    echo -e "\n${CYAN}[${STEP}/${TOTAL}] 跳过 Milvus 向量检索 (使用 --vector 启用)${NC}"
 fi
 
 # ---- 等待状态 ----
@@ -71,6 +116,16 @@ if [ "$START_MONITORING" = true ]; then
     cd "$MONITORING_DIR"
     docker compose -f docker-compose-monitoring.yml ps
 fi
+	if [ "$START_ML" = true ] && [ -f "$MLFLOW_DIR/docker-compose.mlflow.yml" ]; then
+	    echo ""
+	    cd "$MLFLOW_DIR"
+	    docker compose -f docker-compose.mlflow.yml ps 2>/dev/null || true
+	fi
+	if [ "$START_VECTOR" = true ] && [ -f "$VECTOR_DIR/docker-compose.vector.yml" ]; then
+	    echo ""
+	    cd "$VECTOR_DIR"
+	    docker compose -f docker-compose.vector.yml ps 2>/dev/null || true
+	fi
 
 echo ""
 echo -e "${CYAN}========================================"

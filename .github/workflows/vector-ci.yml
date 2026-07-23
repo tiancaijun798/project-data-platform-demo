@@ -1,0 +1,261 @@
+# ==========================================
+# Vector Search Demo CI
+# Validates embed.py and query_api.py imports
+# and basic functionality for the vector search component.
+# ==========================================
+
+name: Vector Search Demo CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - 'demo_vector/**'
+      - '.github/workflows/vector-ci.yml'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ──── Job 1: Embedding Module Validation ────
+  embed-validation:
+    name: Embed Module Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install core dependencies
+        run: |
+          pip install --upgrade pip
+          pip install numpy pandas pyarrow
+
+      - name: Install sentence-transformers and pymilvus
+        run: pip install sentence-transformers pymilvus
+
+      - name: Test embed.py import
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'demo_vector')
+          print('Testing embed.py import...')
+          from embed import (
+              create_event_collection,
+              create_product_collection,
+              build_event_text,
+              build_product_text,
+              EmbeddingPipeline,
+              main,
+          )
+          print('✅ embed.py imported successfully')
+          print(f'   Functions: create_event_collection, create_product_collection')
+          print(f'   Functions: build_event_text, build_product_text')
+          print(f'   Class: EmbeddingPipeline')
+          "
+
+      - name: Test embed.py text building functions
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'demo_vector')
+          from embed import build_event_text, build_product_text
+
+          # Test event text builder
+          event = {
+              'event_type': 'purchase',
+              'user_id': 'U0001',
+              'product_id': 'P0100',
+              'page': 'checkout',
+              'referrer': 'google',
+              'device': 'mobile',
+              'browser': 'Chrome',
+          }
+          text = build_event_text(event)
+          print(f'Event text: {text}')
+          assert 'purchase' in text
+          assert 'U0001' in text
+          assert 'P0100' in text
+          assert 'mobile' in text
+          print('✅ build_event_text works correctly')
+
+          # Test product text builder
+          product = {
+              'product_id': 'P0100',
+              'total_views': 1500,
+              'total_purchases': 45,
+              'conversion_rate_pct': 3.0,
+          }
+          text = build_product_text(product)
+          print(f'Product text: {text}')
+          assert 'P0100' in text
+          assert '1500' in text or '浏览' in text
+          assert '45' in text or '购买' in text
+          print('✅ build_product_text works correctly')
+          "
+
+      - name: Test sentence-transformers encoding
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'demo_vector')
+          from sentence_transformers import SentenceTransformer
+          import numpy as np
+
+          print('Loading embedding model...')
+          model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+          print('✅ Model loaded')
+
+          # Encode simple text
+          texts = [
+              '用户浏览了商品页面',
+              '从搜索引擎来的购买事件',
+              '移动端用户的加购行为',
+          ]
+          embeddings = model.encode(texts, normalize_embeddings=True)
+          print(f'Encoded {len(texts)} texts → shape: {embeddings.shape}')
+          assert embeddings.shape == (3, 384), f'Expected (3, 384), got {embeddings.shape}'
+          print(f'✅ Encoding works: {len(texts)} texts, dim={embeddings.shape[1]}')
+
+          # Check normalization
+          norms = np.linalg.norm(embeddings, axis=1)
+          assert np.allclose(norms, 1.0, atol=1e-5), f'Vectors not normalized: {norms}'
+          print(f'✅ Vectors are L2-normalized (norms ≈ 1.0)')
+          "
+
+  # ──── Job 2: Query API Module Validation ────
+  query-validation:
+    name: Query API Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install fastapi uvicorn pydantic sentence-transformers
+
+      - name: Test query_api.py import
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'demo_vector')
+          print('Testing query_api.py import...')
+          from query_api import (
+              app,
+              lifespan,
+              health,
+              search_events,
+              search_products,
+              collection_stats,
+              natural_query,
+              NaturalQueryRequest,
+              SearchResult,
+              SearchResponse,
+          )
+          print('✅ query_api.py imported successfully')
+          print(f'   App title: {app.title}')
+          print(f'   App version: {app.version}')
+          print(f'   Routes: {[r.path for r in app.routes]}')
+          "
+
+      - name: Test query_api.py Pydantic models
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'demo_vector')
+          from query_api import NaturalQueryRequest, SearchResult, SearchResponse
+
+          # Test NaturalQueryRequest
+          req = NaturalQueryRequest(query='test query', top_k=10)
+          print(f'NaturalQueryRequest: query={req.query}, top_k={req.top_k}')
+          assert req.query == 'test query'
+          assert req.top_k == 10
+          print('✅ NaturalQueryRequest model validated')
+
+          # Test SearchResult
+          result = SearchResult(id=1, score=0.95, event_type='view', text_content='test')
+          print(f'SearchResult: id={result.id}, score={result.score}')
+          assert result.id == 1
+          assert result.score == 0.95
+          print('✅ SearchResult model validated')
+          "
+
+  # ──── Job 3: FAISS Fallback Validation ────
+  faiss-validation:
+    name: FAISS Fallback Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install numpy sentence-transformers faiss-cpu
+
+      - name: Validate FAISS integration capability
+        run: |
+          python -c "
+          import numpy as np
+          import faiss
+          from sentence_transformers import SentenceTransformer
+
+          print('Validating FAISS + sentence-transformers integration...')
+
+          # Create test embeddings
+          model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+          texts = [f'商品编号 P{str(i).zfill(4)} 用户行为数据' for i in range(100)]
+          embeddings = model.encode(texts, normalize_embeddings=True)
+          print(f'  Generated {len(embeddings)} embeddings, dim={embeddings.shape[1]}')
+
+          # Create FAISS index
+          dim = embeddings.shape[1]
+          index = faiss.IndexFlatIP(dim)  # Inner Product (cosine similarity)
+          index.add(embeddings.astype(np.float32))
+          print(f'  FAISS index size: {index.ntotal}')
+
+          # Search
+          query = model.encode(['移动端用户购买行为'], normalize_embeddings=True)
+          D, I = index.search(query.astype(np.float32), k=5)
+          print(f'  Search returned {len(I[0])} results')
+          print(f'  Top scores: {D[0][:3]}')
+          assert len(I[0]) == 5
+          assert D[0][0] >= 0  # IP scores should be >= 0 for normalized vectors
+          print('✅ FAISS integration validated successfully')
+          "
+
+  # ──── Job 4: Vector CI Summary ────
+  vector-ci-summary:
+    name: Vector CI Summary
+    needs: [embed-validation, query-validation, faiss-validation]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Print summary
+        run: |
+          echo "========================================="
+          echo "  Vector Search Demo CI Complete"
+          echo "========================================="
+          echo "  embed-validation:   ${{ needs.embed-validation.result }}"
+          echo "  query-validation:   ${{ needs.query-validation.result }}"
+          echo "  faiss-validation:   ${{ needs.faiss-validation.result }}"
+          echo "========================================="

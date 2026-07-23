@@ -1,0 +1,12 @@
+# ==========================================
+# Vector Search Demo — Python Dependencies
+# ==========================================
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pymilvus>=2.4.0
+sentence-transformers>=2.7.0
+pandas>=2.2.0
+pyarrow>=15.0.0
+pydantic>=2.0.0
+httpx>=0.28.0
+numpy>=1.26.0

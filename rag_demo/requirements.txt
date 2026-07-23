@@ -1,0 +1,20 @@
+# RAG Demo — Dependencies
+# Install: pip install -r requirements.txt
+
+# Vector store
+faiss-cpu>=1.7.4,<2.0
+
+# Embedding model
+sentence-transformers>=2.2.0,<4.0
+
+# Web server (for rag_server.py)
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+
+# Data reading (for build_knowledge_base.py)
+pandas>=1.5.0
+pyarrow>=10.0.0
+numpy>=1.24.0
+
+# Async + validation (bundled with FastAPI but explicit)
+pydantic>=2.0.0

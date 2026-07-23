@@ -98,3 +98,8 @@ credentials*
 .env.local
 .env.production
 real_data_test/
+
+# AI 模型缓存 (运行时自动下载，不提交)
+model_cache/
+*.cachedir/
+.faiss
