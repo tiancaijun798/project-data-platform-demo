@@ -44,8 +44,11 @@ MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
 EMBEDDING_MODEL = os.getenv(
     "EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2"
 )
+EMBEDDING_BACKEND = os.getenv("EMBEDDING_BACKEND", "local")  # "local" | "openai"
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_API_BASE_URL = os.getenv("LLM_API_BASE_URL", "https://api.deepseek.com/v1")
 BATCH_SIZE = 128
-VECTOR_DIM = 384  # MiniLM-L12-v2 输出维度
+VECTOR_DIM = 384  # MiniLM-L12-v2 输出维度（OpenAI 后端会动态调整）
 
 
 # ---- Milvus Collection Schema ----
@@ -54,7 +57,7 @@ def create_event_collection() -> Collection:
     collection_name = "user_events_vectors"
 
     if utility.has_collection(collection_name):
-        print(f"  ⚠️  集合 '{collection_name}' 已存在，将删除重建...")
+        print(f"  [WARN]  集合 '{collection_name}' 已存在，将删除重建...")
         utility.drop_collection(collection_name)
 
     fields = [
@@ -78,7 +81,7 @@ def create_event_collection() -> Collection:
         "params": {"nlist": 128},
     }
     collection.create_index("embedding", index_params)
-    print(f"  ✅ 集合 '{collection_name}' 创建完成 (IVF_FLAT, nlist=128)")
+    print(f"  [OK] 集合 '{collection_name}' 创建完成 (IVF_FLAT, nlist=128)")
 
     return collection
 
@@ -88,7 +91,7 @@ def create_product_collection() -> Collection:
     collection_name = "product_vectors"
 
     if utility.has_collection(collection_name):
-        print(f"  ⚠️  集合 '{collection_name}' 已存在，将删除重建...")
+        print(f"  [WARN]  集合 '{collection_name}' 已存在，将删除重建...")
         utility.drop_collection(collection_name)
 
     fields = [
@@ -109,7 +112,7 @@ def create_product_collection() -> Collection:
         "params": {"nlist": 128},
     }
     collection.create_index("embedding", index_params)
-    print(f"  ✅ 集合 '{collection_name}' 创建完成 (IVF_FLAT, nlist=128)")
+    print(f"  [OK] 集合 '{collection_name}' 创建完成 (IVF_FLAT, nlist=128)")
 
     return collection
 
@@ -149,26 +152,104 @@ def build_product_text(row: dict) -> str:
 class EmbeddingPipeline:
     """Embedding 生成与入库流水线。"""
 
-    def __init__(self):
-        self.model = SentenceTransformer(EMBEDDING_MODEL)
-        print(f"  🤖 加载模型: {EMBEDDING_MODEL} (dim={VECTOR_DIM})")
+    def __init__(self, backend: str = "local"):
+        self.backend = backend
+        if backend == "openai":
+            if not LLM_API_KEY:
+                print("  [WARN]  LLM_API_KEY not set, fallback to local backend")
+                self.backend = "local"
+            else:
+                self.model = None
+                self.api_key = LLM_API_KEY
+                self.api_base = LLM_API_BASE_URL.rstrip("/")
+                print(f"  [MODEL] Using OpenAI-compatible Embedding API: {self.api_base}")
+                return
+
+        # Load local model — try cached path first
+        from pathlib import Path
+        local_path = Path("rag_demo/knowledge_base/models/sentence-transformers--paraphrase-multilingual-MiniLM-L12-v2")
+        if local_path.exists():
+            self.model = SentenceTransformer(str(local_path))
+            print(f"  [MODEL] Loaded from local cache: {local_path}")
+        else:
+            self.model = SentenceTransformer(EMBEDDING_MODEL)
+            print(f"  [MODEL] Loaded: {EMBEDDING_MODEL} (dim={VECTOR_DIM})")
 
     def encode_batch(self, texts: list[str]) -> np.ndarray:
         """批量编码文本为归一化向量。"""
-        embeddings = self.model.encode(
-            texts,
-            batch_size=BATCH_SIZE,
-            show_progress_bar=True,
-            normalize_embeddings=True,  # L2 归一化，配合 IP 度量 = cosine similarity
-        )
+        if self.backend == "openai":
+            return self._encode_openai(texts)
+        else:
+            embeddings = self.model.encode(
+                texts,
+                batch_size=BATCH_SIZE,
+                show_progress_bar=True,
+                normalize_embeddings=True,
+            )
+            return embeddings
+
+    def _encode_openai(self, texts: list[str]) -> np.ndarray:
+        """通过 OpenAI-compatible Embedding API 编码文本。"""
+        import requests
+
+        url = f"{self.api_base}/embeddings"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        all_embeddings = []
+        # API 通常限制 batch size，分批调用
+        api_batch_size = 100
+        total_batches = (len(texts) - 1) // api_batch_size + 1
+
+        for batch_idx in range(total_batches):
+            start = batch_idx * api_batch_size
+            end = min(start + api_batch_size, len(texts))
+            batch_texts = texts[start:end]
+
+            payload = {
+                "model": "text-embedding-3-small",
+                "input": batch_texts,
+                "encoding_format": "float",
+            }
+
+            resp = requests.post(url, headers=headers, json=payload, timeout=60)
+            if resp.status_code != 200:
+                raise RuntimeError(
+                    f"Embedding API error {resp.status_code}: {resp.text[:200]}"
+                )
+
+            data = resp.json()
+            batch_embs = [item["embedding"] for item in data["data"]]
+            all_embeddings.extend(batch_embs)
+
+            if batch_idx % 10 == 0:
+                print(f"     API batch {batch_idx + 1}/{total_batches} "
+                      f"({end}/{len(texts)})")
+
+        embeddings = np.array(all_embeddings, dtype=np.float32)
+
+        # L2 归一化（与 local 后端行为一致）
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        embeddings = embeddings / norms
+
         return embeddings
+
+    def get_dim(self) -> int:
+        """返回向量维度。"""
+        if self.backend == "openai":
+            # text-embedding-3-small 输出 1536 维
+            return 1536
+        return VECTOR_DIM
 
     def ingest_parquet(self, input_path: str,
                        event_col: Collection,
                        product_col: Optional[Collection] = None) -> dict:
         """从 Parquet 目录读取数据，生成 embedding 并写入 Milvus。"""
         print(f"\n{'='*50}")
-        print(f"  📖 Parquet → Embedding → Milvus")
+        print(f"  [LOAD] Parquet → Embedding → Milvus")
         print(f"  输入路径: {input_path}")
         print(f"{'='*50}")
 
@@ -184,7 +265,7 @@ class EmbeddingPipeline:
                         fp = os.path.join(root, f)
                         dfs.append(pq.read_table(fp).to_pandas())
             if not dfs:
-                print("  ❌ 未找到 Parquet 文件！")
+                print("   未找到 Parquet 文件！")
                 return {"error": "no parquet files found"}
             df = pd.concat(dfs, ignore_index=True)
 
@@ -194,11 +275,11 @@ class EmbeddingPipeline:
         # 采样（如果数据量太大）
         if total > 10000:
             df = df.sample(n=10000, random_state=42)
-            print(f"  ⚠️  数据量较大，采样至 {len(df)} 行")
+            print(f"  [WARN]  数据量较大，采样至 {len(df)} 行")
             total = len(df)
 
         # 构造文本
-        print("  📝 构造事件文本...")
+        print("  [TEXT] 构造事件文本...")
         texts = []
         records = []
         for _, row in df.iterrows():
@@ -208,14 +289,14 @@ class EmbeddingPipeline:
             records.append(row_dict)
 
         # 批量编码
-        print(f"  🧮 生成 embedding ({len(texts)} 条)...")
+        print(f"  [ENCODE] 生成 embedding ({len(texts)} 条)...")
         t0 = time.time()
         embeddings = self.encode_batch(texts)
         encode_time = time.time() - t0
-        print(f"     ⏱  编码耗时: {encode_time:.2f}s ({len(texts)/encode_time:.0f} 条/秒)")
+        print(f"     [TIME]  编码耗时: {encode_time:.2f}s ({len(texts)/encode_time:.0f} 条/秒)")
 
         # 写入 Milvus
-        print("  💾 写入 Milvus...")
+        print("  [SAVE] 写入 Milvus...")
         t0 = time.time()
         insert_data = []
         for i, rec in enumerate(records):
@@ -252,8 +333,8 @@ class EmbeddingPipeline:
             "collection": event_col.name,
         }
 
-        print(f"     ⏱  写入耗时: {insert_time:.2f}s")
-        print(f"  ✅ 完成! {total} 条 embedding 已写入 '{event_col.name}'")
+        print(f"     [TIME]  写入耗时: {insert_time:.2f}s")
+        print(f"  [OK] 完成! {total} 条 embedding 已写入 '{event_col.name}'")
 
         return stats
 
@@ -276,7 +357,7 @@ class EmbeddingPipeline:
 
         # ---- 商品向量 ----
         if product_col:
-            print(f"\n  📖 从 PostgreSQL 读取商品数据 (dim_products)...")
+            print(f"\n  [LOAD] 从 PostgreSQL 读取商品数据 (dim_products)...")
             try:
                 df_products = pd.read_sql(
                     f"SELECT * FROM public_clean.dim_products LIMIT {limit}",
@@ -301,13 +382,13 @@ class EmbeddingPipeline:
                         product_col.insert(batch)
                     product_col.flush()
 
-                    print(f"  ✅ {len(insert_data)} 条商品 embedding 已写入 '{product_col.name}'")
+                    print(f"  [OK] {len(insert_data)} 条商品 embedding 已写入 '{product_col.name}'")
                     stats["collections"]["product_vectors"] = len(insert_data)
             except Exception as e:
-                print(f"  ⚠️  商品数据读取失败: {e}")
+                print(f"  [WARN]  商品数据读取失败: {e}")
 
         # ---- 事件向量 ----
-        print(f"\n  📖 从 PostgreSQL 读取事件数据 (raw.user_events)...")
+        print(f"\n  [LOAD] 从 PostgreSQL 读取事件数据 (raw.user_events)...")
         try:
             df_events = pd.read_sql(
                 f"SELECT * FROM raw.user_events LIMIT {limit}",
@@ -340,10 +421,10 @@ class EmbeddingPipeline:
                     event_col.insert(batch)
                 event_col.flush()
 
-                print(f"  ✅ {len(insert_data)} 条事件 embedding 已写入 '{event_col.name}'")
+                print(f"  [OK] {len(insert_data)} 条事件 embedding 已写入 '{event_col.name}'")
                 stats["collections"]["user_events_vectors"] = len(insert_data)
         except Exception as e:
-            print(f"  ⚠️  事件数据读取失败: {e}")
+            print(f"  [WARN]  事件数据读取失败: {e}")
 
         engine.dispose()
         return stats
@@ -353,7 +434,7 @@ class EmbeddingPipeline:
 def run_benchmark(event_col: Collection, model: SentenceTransformer):
     """在已入库数据上运行语义检索性能评估。"""
     print(f"\n{'='*50}")
-    print("  📊 语义检索性能基准测试")
+    print("  [STATS] 语义检索性能基准测试")
     print(f"{'='*50}")
 
     event_col.load()
@@ -392,9 +473,9 @@ def run_benchmark(event_col: Collection, model: SentenceTransformer):
         print(f"  {query:<40s} {top1_type:<18s} {latency_ms:<10.1f}")
 
     avg_latency = total_latency / len(test_queries)
-    print(f"\n  📊 平均检索延迟: {avg_latency:.1f} ms")
-    print(f"  📊 查询总数: {len(test_queries)}")
-    print(f"  ✅ 基准测试完成")
+    print(f"\n  [STATS] 平均检索延迟: {avg_latency:.1f} ms")
+    print(f"  [STATS] 查询总数: {len(test_queries)}")
+    print(f"  [OK] 基准测试完成")
 
 
 # ---- 主入口 ----
@@ -419,23 +500,26 @@ def main():
     args = parser.parse_args()
 
     print("=" * 50)
-    print("  🧬 Embedding Pipeline — 文本 → 向量 → Milvus")
+    print("  [EMBED] Embedding Pipeline — 文本 → 向量 → Milvus")
     print("=" * 50)
     print(f"  Milvus: {args.host}:{args.port}")
+    print(f"  后端: {EMBEDDING_BACKEND}")
     print(f"  模型: {EMBEDDING_MODEL}")
-    print(f"  向量维度: {VECTOR_DIM}")
     print(f"  数据源: {args.source}")
 
     # 连接 Milvus
     connections.connect(host=args.host, port=args.port)
-    print(f"  ✅ 已连接 Milvus\n")
+    print(f"  [OK] 已连接 Milvus\n")
 
-    # 创建 Collections
+    # 初始化 Embedding Pipeline，获取实际向量维度
+    global VECTOR_DIM
+    pipeline = EmbeddingPipeline(backend=EMBEDDING_BACKEND)
+    VECTOR_DIM = pipeline.get_dim()
+    print(f"  [DIM] 向量维度: {VECTOR_DIM}")
+
+    # 创建 Collections（使用当前 VECTOR_DIM）
     event_col = create_event_collection()
     product_col = create_product_collection()
-
-    # 初始化 Embedding Pipeline
-    pipeline = EmbeddingPipeline()
 
     all_stats = {}
 
@@ -454,10 +538,10 @@ def main():
 
     # 汇总
     print(f"\n{'='*50}")
-    print("  📊 入库统计汇总")
+    print("  [STATS] 入库统计汇总")
     print(f"{'='*50}")
     print(json.dumps(all_stats, indent=2, ensure_ascii=False, default=str))
-    print(f"\n✅ Embedding Pipeline 完成！")
+    print(f"\n[OK] Embedding Pipeline 完成！")
 
     connections.disconnect("default")
 

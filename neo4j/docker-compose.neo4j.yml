@@ -1,0 +1,50 @@
+version: '3.9'
+
+# ==========================================
+# Neo4j 图数据库 — 用户行为图谱分析
+# ==========================================
+
+services:
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: data-platform-neo4j
+    ports:
+      - "7474:7474"   # HTTP
+      - "7688:7687"   # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/changeme123
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j__config=true
+      - NEO4J_PLUGINS=["apoc"]
+      # 内存限制（适配开发环境）
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1g
+      - NEO4J_server_memory_pagecache_size=256m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+networks:
+  data-platform-net:
+    external: true
+    name: data-platform-net
+
+volumes:
+  neo4j_data:
+    name: data-platform-neo4j-data
+  neo4j_logs:
+    name: data-platform-neo4j-logs
+  neo4j_import:
+    name: data-platform-neo4j-import

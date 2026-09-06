@@ -39,6 +39,67 @@ import numpy as np
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+
+# ---------------------------------------------------------------------------
+# 0.  Model download helper (works around httpx SSL issues on Windows)
+# ---------------------------------------------------------------------------
+def download_model_locally(model_name: str, cache_dir: Path) -> Path:
+    """Download a sentence-transformers model using requests (not httpx).
+
+    Returns the local path where the model files are stored.
+    Works around SSL certificate issues with httpx/huggingface_hub on Windows.
+    """
+    import requests
+
+    local_dir = cache_dir / "models" / model_name.replace("/", "--")
+    if local_dir.exists() and (local_dir / "pytorch_model.bin").exists():
+        print(f"  [CACHE] Model already downloaded at {local_dir}")
+        return local_dir
+
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    base_url = (
+        f"https://huggingface.co/{model_name}/resolve/main"
+    )
+
+    # Files needed for sentence-transformers to load the model
+    required_files = [
+        "config.json",
+        "tokenizer_config.json",
+        "tokenizer.json",
+        "special_tokens_map.json",
+        "sentence_bert_config.json",
+        "modules.json",
+        "config_sentence_transformers.json",
+        "pytorch_model.bin",        # Model weights (~470 MB)
+        "1_Pooling/config.json",    # SentenceTransformer pooling module
+    ]
+
+    print(f"  Downloading model files from HuggingFace...")
+    for filename in required_files:
+        url = f"{base_url}/{filename}"
+        dest = local_dir / filename
+        if dest.exists():
+            # Quick size check — re-download if file is suspiciously small
+            if dest.stat().st_size > 100:
+                continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        print(f"    -> {filename} ... ", end="", flush=True)
+        try:
+            resp = requests.get(url, timeout=120, stream=True)
+            if resp.status_code == 200:
+                with open(dest, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                size_mb = dest.stat().st_size / (1024 * 1024)
+                print(f"OK ({size_mb:.1f} MB)")
+            else:
+                print(f"SKIP (HTTP {resp.status_code})")
+        except Exception as exc:
+            print(f"FAIL ({exc})")
+
+    return local_dir
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -202,12 +263,13 @@ def row_to_chunk(row: dict) -> str:
 def build_faiss_index(
     chunks: list[str],
     metadata: list[dict],
-    model,
+    model,  # SentenceTransformer or None (triggers TF-IDF fallback)
     output_dir: Path,
 ) -> dict:
     """Encode chunks, build a FAISS index, and save everything to disk.
 
     Returns a stats dict with timing and size information.
+    If model is None, uses sklearn TF-IDF + TruncatedSVD as fallback.
     """
     import faiss
 
@@ -216,20 +278,73 @@ def build_faiss_index(
     total = len(chunks)
     print(f"\n  📝 {total} chunks ready for embedding")
 
-    # Encode with progress indication
-    print(f"  🧮 Encoding with sentence-transformers...")
+    # Handle empty input — create a minimal empty index
+    if total == 0:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        empty_dim = 384
+        empty_index = faiss.IndexIDMap(faiss.IndexFlatIP(empty_dim))
+        idx_path = output_dir / "index.faiss"
+        meta_path = output_dir / "metadata.json"
+        faiss.write_index(empty_index, str(idx_path))
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump([], f)
+        return {
+            "total_vectors": 0, "vector_dim": empty_dim,
+            "encode_time_s": 0, "encode_speed": 0,
+            "build_time_s": 0, "index_size_kb": 0, "metadata_size_kb": 0,
+        }
+
     t0 = time.time()
-    embeddings = model.encode(
-        chunks,
-        batch_size=128,
-        show_progress_bar=True,
-        normalize_embeddings=True,  # L2-normalize => inner product = cosine sim
-    )
+
+    if model is not None:
+        # ── sentence-transformers path ──
+        print(f"  🧮 Encoding with sentence-transformers...")
+        embeddings = model.encode(
+            chunks,
+            batch_size=128,
+            show_progress_bar=True,
+            normalize_embeddings=True,
+        )
+        dim = embeddings.shape[1]
+    else:
+        # ── TF-IDF + TruncatedSVD fallback ──
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.decomposition import TruncatedSVD
+        import pickle
+
+        print(f"  🧮 Encoding with TF-IDF + TruncatedSVD (384d)...")
+        vectorizer = TfidfVectorizer(
+            max_features=2000,
+            ngram_range=(1, 2),
+            sublinear_tf=True,
+        )
+        tfidf_matrix = vectorizer.fit_transform(chunks)
+        dim = 384
+        n_components = min(dim, tfidf_matrix.shape[1] - 1)
+        if n_components < dim:
+            dim = n_components
+        svd = TruncatedSVD(n_components=dim, random_state=42)
+        embeddings = svd.fit_transform(tfidf_matrix)
+
+        # Save transformers for server-side query encoding
+        tfidf_path = output_dir / "tfidf_vectorizer.pkl"
+        svd_path = output_dir / "svd_transformer.pkl"
+        with open(tfidf_path, "wb") as f:
+            pickle.dump(vectorizer, f)
+        with open(svd_path, "wb") as f:
+            pickle.dump(svd, f)
+        print(f"     TF-IDF vectorizer saved → {tfidf_path}")
+        print(f"     SVD transformer saved → {svd_path}")
+
+        # L2-normalize for cosine similarity via inner product
+        from sklearn.preprocessing import normalize
+        embeddings = normalize(embeddings, norm='l2')
+        print(f"     Vocabulary size: {tfidf_matrix.shape[1]}")
+        print(f"     SVD components: {dim}")
+
     encode_time = time.time() - t0
     print(f"     Encoded {total} chunks in {encode_time:.2f}s "
           f"({total / encode_time:.0f} chunks/s)")
-
-    dim = embeddings.shape[1]
     print(f"     Vector dimension: {dim}")
 
     # Build FAISS index: IndexIDMap wrapping IndexFlatIP
@@ -244,11 +359,22 @@ def build_faiss_index(
     build_time = time.time() - t0
     print(f"     Index built in {build_time:.2f}s ({index.ntotal} vectors)")
 
-    # Save index
+    # Save index — use a temp file if path contains unicode (FAISS C++ limitation)
     index_path = output_dir / "index.faiss"
     meta_path = output_dir / "metadata.json"
 
-    faiss.write_index(index, str(index_path))
+    try:
+        faiss.write_index(index, str(index_path))
+    except RuntimeError:
+        # FAISS can't handle unicode paths on Windows — use ASCII-only temp path
+        import tempfile, shutil
+        ascii_tmp = Path("C:/temp") if Path("C:/temp").exists() else Path(tempfile.gettempdir())
+        ascii_tmp.mkdir(parents=True, exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".faiss", dir=str(ascii_tmp))
+        os.close(tmp_fd)
+        faiss.write_index(index, tmp_path)
+        shutil.move(tmp_path, str(index_path))
+        print(f"  [WORKAROUND] FAISS unicode path workaround applied")
     print(f"  💾 FAISS index saved → {index_path} "
           f"({os.path.getsize(index_path) / 1024:.1f} KB)")
 
@@ -291,7 +417,26 @@ def run_benchmark(output_dir: Path):
     model_name = os.getenv(
         "EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2"
     )
-    model = SentenceTransformer(model_name)
+    try:
+        model = SentenceTransformer(model_name)
+    except Exception:
+        try:
+            local_path = download_model_locally(model_name, output_dir.parent)
+            model = SentenceTransformer(str(local_path))
+        except Exception:
+            # TF-IDF fallback
+            import pickle as _pk
+            tfidf_path = output_dir / "tfidf_vectorizer.pkl"
+            svd_path = output_dir / "svd_transformer.pkl"
+            if tfidf_path.exists() and svd_path.exists():
+                with open(tfidf_path, "rb") as f:
+                    vec = _pk.load(f)
+                with open(svd_path, "rb") as f:
+                    svd = _pk.load(f)
+                model = (vec, svd)
+            else:
+                print("[SKIP] No embedding model available for benchmark")
+                return
     index = faiss.read_index(str(index_path))
     print(f"  Index: {index.ntotal} vectors, dim={index.d}")
 
@@ -314,7 +459,14 @@ def run_benchmark(output_dir: Path):
 
     for i, query in enumerate(test_queries, 1):
         # Encode query
-        q_vec = model.encode([query], normalize_embeddings=True).astype(np.float32)
+        if isinstance(model, tuple):
+            from sklearn.preprocessing import normalize
+            vectorizer, svd = model
+            tfidf_vec = vectorizer.transform([query])
+            svd_vec = svd.transform(tfidf_vec)
+            q_vec = normalize(svd_vec, norm='l2').astype(np.float32)
+        else:
+            q_vec = model.encode([query], normalize_embeddings=True).astype(np.float32)
 
         # Search
         t0 = time.time()
@@ -421,10 +573,29 @@ def main():
     from sentence_transformers import SentenceTransformer
 
     # ── Load embedding model ──
+    using_tfidf_fallback = False
+    dim = 384  # target dimension
+
     print(f"  🤖 Loading model: {args.model} ...")
-    model = SentenceTransformer(args.model)
-    dim = model.get_sentence_embedding_dimension()
-    print(f"     Dimension: {dim}")
+    try:
+        model = SentenceTransformer(args.model)
+    except Exception as e1:
+        # Fallback 1: download via requests, then load from local path
+        print(f"  ⚠️  Direct load failed: {e1}")
+        print(f"  Attempting download via requests...")
+        try:
+            local_path = download_model_locally(args.model, args.output_dir)
+            model = SentenceTransformer(str(local_path))
+        except Exception as e2:
+            # Fallback 2: use sklearn TF-IDF + SVD (no downloads needed)
+            print(f"  ⚠️  Download failed: {e2}")
+            print(f"  Falling back to sklearn TF-IDF + TruncatedSVD (384d)")
+            model = None
+            using_tfidf_fallback = True
+
+    if model is not None:
+        dim = model.get_sentence_embedding_dimension()
+        print(f"     Dimension: {dim}")
 
     # ── Load data ──
     records = read_parquet_events(args.parquet_dir, args.sample_size)

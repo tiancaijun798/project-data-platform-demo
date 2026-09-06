@@ -14,3 +14,15 @@ httpx>=0.28.0
 kafka-python>=2.0.2
 pyspark>=3.5.0
 prometheus-fastapi-instrumentator>=7.0.0
+# --- AI/ML 组件 ---
+sentence-transformers>=2.7.0
+faiss-cpu>=1.8.0
+pymilvus>=2.4.0
+scikit-learn>=1.5.0
+mlflow>=2.14.0
+# --- 图数据库 ---
+neo4j>=5.20.0
+# --- LLM API ---
+requests>=2.31.0
+# --- 文档生成 ---
+python-docx>=1.1.0

@@ -39,6 +39,62 @@ from pydantic import BaseModel, Field
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+
+# ---------------------------------------------------------------------------
+# 0.  Model download helper (works around httpx SSL issues on Windows)
+# ---------------------------------------------------------------------------
+def download_model_locally(model_name: str, cache_dir: Path) -> Path:
+    """Download a sentence-transformers model using requests (not httpx).
+
+    Returns the local path where the model files are stored.
+    """
+    import requests
+
+    local_dir = cache_dir / "models" / model_name.replace("/", "--")
+    if local_dir.exists() and (local_dir / "pytorch_model.bin").exists():
+        print(f"  [CACHE] Model already downloaded at {local_dir}")
+        return local_dir
+
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    base_url = f"https://huggingface.co/{model_name}/resolve/main"
+
+    required_files = [
+        "config.json",
+        "tokenizer_config.json",
+        "tokenizer.json",
+        "special_tokens_map.json",
+        "sentence_bert_config.json",
+        "modules.json",
+        "config_sentence_transformers.json",
+        "pytorch_model.bin",
+        "1_Pooling/config.json",
+    ]
+
+    print(f"  Downloading model files from HuggingFace...")
+    for filename in required_files:
+        url = f"{base_url}/{filename}"
+        dest = local_dir / filename
+        if dest.exists() and dest.stat().st_size > 100:
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        print(f"    -> {filename} ... ", end="", flush=True)
+        try:
+            resp = requests.get(url, timeout=120, stream=True)
+            if resp.status_code == 200:
+                with open(dest, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                size_mb = dest.stat().st_size / (1024 * 1024)
+                print(f"OK ({size_mb:.1f} MB)")
+            else:
+                print(f"SKIP (HTTP {resp.status_code})")
+        except Exception as exc:
+            print(f"FAIL ({exc})")
+
+    return local_dir
+
+
 # ---------------------------------------------------------------------------
 # Configuration (all via environment variables)
 # ---------------------------------------------------------------------------
@@ -79,9 +135,36 @@ async def lifespan(app: FastAPI):
 
     # 1. Load embedding model
     print(f"  🤖 Loading model: {EMBEDDING_MODEL}")
-    model = SentenceTransformer(EMBEDDING_MODEL)
-    dim = model.get_sentence_embedding_dimension()
-    print(f"     Dimension: {dim}")
+    try:
+        model = SentenceTransformer(EMBEDDING_MODEL)
+    except Exception:
+        print(f"  ⚠️  Direct load failed. Trying local download...")
+        try:
+            local_path = download_model_locally(EMBEDDING_MODEL, SCRIPT_DIR)
+            model = SentenceTransformer(str(local_path))
+        except Exception as e2:
+            print(f"  ⚠️  SentenceTransformer failed: {e2}")
+            print(f"  Looking for TF-IDF fallback...")
+            tfidf_path = SCRIPT_DIR / "knowledge_base" / "tfidf_vectorizer.pkl"
+            svd_path = SCRIPT_DIR / "knowledge_base" / "svd_transformer.pkl"
+            if tfidf_path.exists() and svd_path.exists():
+                import pickle as _pk
+                with open(tfidf_path, "rb") as f:
+                    model = _pk.load(f)  # Actually a TfidfVectorizer
+                with open(svd_path, "rb") as f:
+                    model = (model, _pk.load(f))  # (vectorizer, svd)
+                print(f"  ✅ Loaded TF-IDF + SVD fallback")
+            else:
+                model = None
+                print(f"  ⚠️  No TF-IDF fallback found either")
+
+    if model is not None:
+        if isinstance(model, tuple):
+            dim = model[1].n_components
+            print(f"     Dimension: {dim} (TF-IDF+SVD)")
+        else:
+            dim = model.get_sentence_embedding_dimension()
+            print(f"     Dimension: {dim}")
 
     # 2. Load FAISS index
     if INDEX_PATH.exists():
@@ -192,8 +275,19 @@ def encode_query(query: str) -> np.ndarray:
     """Encode a natural-language query into a normalized embedding vector."""
     if model is None:
         raise HTTPException(status_code=503, detail="Embedding model not loaded")
-    vec = model.encode([query], normalize_embeddings=True)
-    return vec.astype(np.float32)
+
+    if isinstance(model, tuple):
+        # TF-IDF + SVD fallback
+        from sklearn.preprocessing import normalize
+        vectorizer, svd = model
+        tfidf_vec = vectorizer.transform([query])
+        svd_vec = svd.transform(tfidf_vec)
+        normalized = normalize(svd_vec, norm='l2')
+        return normalized.astype(np.float32)
+    else:
+        # SentenceTransformer
+        vec = model.encode([query], normalize_embeddings=True)
+        return vec.astype(np.float32)
 
 
 def retrieve(query: str, top_k: int) -> list[dict]:
@@ -323,6 +417,104 @@ async def rag_query(body: RAGQueryRequest):
         prompt=prompt,
         elapsed_ms=elapsed_ms,
         total_in_index=index.ntotal if index else 0,
+    )
+
+
+# ── LLM Generation endpoint ──────────────────────────────────────────
+class RAGGenerateRequest(BaseModel):
+    """Request body for /rag/generate — full RAG with LLM generation."""
+
+    query: str = Field(
+        ...,
+        description="Natural language question",
+        min_length=1,
+        max_length=500,
+    )
+    top_k: int = Field(
+        DEFAULT_TOP_K,
+        ge=1,
+        le=MAX_TOP_K,
+        description="Number of documents to retrieve",
+    )
+    system_prompt: Optional[str] = Field(
+        None,
+        description="Custom system prompt for the LLM",
+    )
+    max_tokens: Optional[int] = Field(
+        None,
+        ge=64,
+        le=4096,
+        description="Max tokens for LLM generation",
+    )
+    temperature: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=2.0,
+        description="LLM temperature",
+    )
+
+
+class RAGGenerateResponse(BaseModel):
+    """Response from /rag/generate."""
+
+    query: str
+    answer: str
+    retrieved_docs: list[RetrievedDoc]
+    model: str
+    token_usage: dict
+    retrieval_elapsed_ms: float
+    generation_elapsed_ms: float
+    total_elapsed_ms: float
+    error: Optional[str] = None
+
+
+@app.post("/rag/generate", response_model=RAGGenerateResponse)
+async def rag_generate(body: RAGGenerateRequest):
+    """Full RAG pipeline: retrieve relevant documents, then ask LLM to
+    generate an answer based on the retrieved context.
+
+    This demonstrates the complete Retrieval-Augmented Generation workflow:
+    1. Semantic search to find relevant context
+    2. LLM generation grounded in that context
+    """
+    t_total = time.time()
+
+    # Step 1: Retrieve
+    t0 = time.time()
+    try:
+        docs = retrieve(body.query, body.top_k)
+    except HTTPException:
+        raise
+    retrieval_ms = round((time.time() - t0) * 1000, 1)
+
+    # Step 2: Generate with LLM
+    from llm_generator import LLMGenerator
+
+    gen = LLMGenerator(
+        max_tokens=body.max_tokens or DEFAULT_MAX_TOKENS,
+        temperature=body.temperature or DEFAULT_TEMPERATURE,
+    )
+
+    result = gen.generate(
+        query=body.query,
+        context_docs=docs,
+        system_prompt=body.system_prompt,
+        max_tokens=body.max_tokens,
+        temperature=body.temperature,
+    )
+    generation_ms = result.get("elapsed_ms", 0)
+    total_ms = round((time.time() - t_total) * 1000, 1)
+
+    return RAGGenerateResponse(
+        query=body.query,
+        answer=result.get("answer", ""),
+        retrieved_docs=[RetrievedDoc(**d) for d in docs],
+        model=result.get("model", "unknown"),
+        token_usage=result.get("usage", {}),
+        retrieval_elapsed_ms=retrieval_ms,
+        generation_elapsed_ms=round(generation_ms, 1),
+        total_elapsed_ms=total_ms,
+        error=result.get("error"),
     )
 
 
