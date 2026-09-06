@@ -54,7 +54,7 @@
 ```
 
 核心数据流：`事件采集 → 批处理 → 建模/质量 → 特征 → 训练/AI → 服务 → 监控`
-AI 侧数据流：`事件数据 → embedding/分块 → Milvus/FAISS 向量库 & RAG 知识库 → FastAPI `/api/ai/*` → React 前端`
+AI 侧数据流：`事件数据 → embedding/分块 → Milvus/FAISS 向量库 & RAG 知识库 → FastAPI /api/ai/* → React 前端`
 
 ---
 

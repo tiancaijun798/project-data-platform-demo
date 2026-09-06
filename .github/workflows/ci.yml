@@ -15,7 +15,8 @@ on:
 
 env:
   DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
-  PYTHON_VERSION: '3.13'
+  # Airflow 2.10.4 官方支持 Python 3.8–3.12(Requires-Python <3.13),故全流水线用 3.12
+  PYTHON_VERSION: '3.12'
 
 jobs:
   # ──── Job 1: Python Lint & Unit Tests ────
@@ -32,7 +33,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: pip install pandas pyarrow pytest flake8 fastapi httpx pydantic sqlalchemy prometheus-fastapi-instrumentator
+        # psycopg2-binary: src/main.py 顶层 create_engine("postgresql://…") 会懒加载 psycopg2
+        run: pip install pandas pyarrow pytest flake8 fastapi httpx pydantic sqlalchemy prometheus-fastapi-instrumentator psycopg2-binary
 
       - name: Run flake8 lint
         run: flake8 src/ dags/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -65,128 +67,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      # Pin the verified GE version and drive it via a committed script (ephemeral context,
+      # no project yml) so the job is immune to GE major-version API/config drift.
       - name: Install dependencies
-        run: pip install great_expectations pandas pyarrow
+        run: pip install great_expectations==1.22.0 pandas pyarrow
 
-      - name: Generate test data matching schema
-        run: |
-          python -c "
-          import json, uuid, os
-          import pandas as pd
-
-          os.makedirs('great_expectations/uncommitted', exist_ok=True)
-
-          events = []
-          event_types = ['view', 'click', 'add_to_cart', 'purchase', 'search']
-          devices = ['desktop', 'mobile', 'tablet']
-          browsers = ['Chrome', 'Firefox', 'Safari', 'Edge']
-
-          for i in range(1, 101):
-              events.append({
-                  'event_id': str(uuid.uuid4()),
-                  'user_id': f'U{str(i % 20).zfill(4)}',
-                  'event_type': event_types[i % len(event_types)],
-                  'product_id': f'P{str(i % 15).zfill(4)}',
-                  'timestamp': f'2026-07-{(i % 28)+1:02d}T{str(i % 24).zfill(2)}:00:00+00:00',
-                  'event_ts': pd.Timestamp('2026-07-20') + pd.Timedelta(hours=i),
-                  'page': 'home',
-                  'referrer': 'google' if i % 3 != 0 else 'direct',
-                  'duration_ms': i * 500,
-                  'device': devices[i % len(devices)],
-                  'browser': browsers[i % len(browsers)],
-                  'processed_at': pd.Timestamp.now(),
-                  'processing_date': pd.Timestamp.now().date(),
-              })
-
-          df = pd.DataFrame(events)
-          print(f'Generated {len(df)} test rows')
-          print(f'Columns: {list(df.columns)}')
-          print(f'event_type values: {sorted(df[\"event_type\"].unique())}')
-          print(f'device values: {sorted(df[\"device\"].unique())}')
-          "
-
-      - name: Run Great Expectations checkpoint
-        run: |
-          python -c "
-          import json, os, sys, uuid
-          import pandas as pd
-          import great_expectations as gx
-
-          # Generate test data inline
-          event_types = ['view', 'click', 'add_to_cart', 'purchase', 'search']
-          devices = ['desktop', 'mobile', 'tablet']
-          browsers = ['Chrome', 'Firefox', 'Safari', 'Edge']
-
-          events = []
-          for i in range(1, 101):
-              events.append({
-                  'event_id': str(uuid.uuid4()),
-                  'user_id': f'U{str(i % 20).zfill(4)}',
-                  'event_type': event_types[i % len(event_types)],
-                  'product_id': f'P{str(i % 15).zfill(4)}',
-                  'timestamp': f'2026-07-{(i % 28)+1:02d}T{str(i % 24).zfill(2)}:00:00+00:00',
-                  'event_ts': pd.Timestamp('2026-07-20') + pd.Timedelta(hours=i),
-                  'page': 'home',
-                  'referrer': 'google' if i % 3 != 0 else 'direct',
-                  'duration_ms': i * 500,
-                  'device': devices[i % len(devices)],
-                  'browser': browsers[i % len(browsers)],
-                  'processed_at': pd.Timestamp.now(),
-                  'processing_date': pd.Timestamp.now().date(),
-              })
-
-          df = pd.DataFrame(events)
-
-          # Set up GE context
-          context = gx.get_context()
-
-          # Load the expectation suite
-          suite_path = 'great_expectations/expectations/user_events_suite.json'
-          with open(suite_path, 'r') as f:
-              suite_dict = json.load(f)
-
-          suite = context.add_expectation_suite(
-              expectation_suite_name='user_events_suite'
-          )
-
-          # Load expectations from JSON and add to suite
-          for exp in suite_dict.get('expectations', []):
-              suite.add_expectation(
-                  gx.expectations.Expectation(
-                      expectation_type=exp['expectation_type'],
-                      kwargs=exp['kwargs'],
-                  )
-              )
-
-          # Validate the dataframe against the suite
-          validator = context.sources.pandas_default.read_dataframe(df)
-          result = validator.validate(expectation_suite=suite)
-
-          # Report results
-          print()
-          print('=' * 60)
-          print('  Great Expectations Validation Report')
-          print('=' * 60)
-          print(f'  Success: {result.success}')
-          print(f'  Statistics:')
-          print(f'    Total expectations: {len(result.results)}')
-          print(f'    Passed: {sum(1 for r in result.results if r.success)}')
-          print(f'    Failed: {sum(1 for r in result.results if not r.success)}')
-          print()
-
-          for r in result.results:
-              status = '✅' if r.success else '❌'
-              print(f'  {status} {r.expectation_config.expectation_type}')
-              if not r.success:
-                  print(f'       → {r.result.get(\"partial_unexpected_list\", r.result)}')
-
-          print()
-          if result.success:
-              print('  ✅ All expectations passed!')
-          else:
-              print('  ❌ Some expectations failed!')
-              sys.exit(1)
-          "
+      - name: Run ExpectationSuite validation
+        run: python scripts/ci_ge_validate.py
 
   # ──── Job 3: End-to-End Smoke Test ────
   smoke-test:
@@ -312,7 +199,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Airflow
-        run: pip install apache-airflow==2.10.4 --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.13.txt" 2>&1 || pip install apache-airflow==2.10.4
+        # Airflow 2.10.4 无 constraints-3.13.txt(仅 3.8–3.12);3.12 是其支持的最后一个大版本
+        run: pip install "apache-airflow==2.10.4" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.12.txt" 2>&1 || pip install "apache-airflow==2.10.4"
 
       - name: Validate demo_pipeline.py DAG import
         run: |
@@ -552,12 +440,11 @@ jobs:
       - name: Test Neo4j query demo logic
         run: |
           python -c "
-          import sys
-          sys.path.insert(0, 'neo4j')
-          # Just verify syntax — don't actually connect
+          # Just verify syntax — don't actually connect.
+          # py_compile resolves filenames against cwd (repo root), so use full relative paths.
           import py_compile
-          py_compile.compile('init_graph.py', doraise=True)
-          py_compile.compile('query_demo.py', doraise=True)
+          py_compile.compile('neo4j/init_graph.py', doraise=True)
+          py_compile.compile('neo4j/query_demo.py', doraise=True)
           print('✅ Neo4j scripts syntax OK')
           "
 
