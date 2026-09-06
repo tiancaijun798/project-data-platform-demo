@@ -1,12 +1,32 @@
 # project-data-platform-demo
 
-> 🏗️ 全栈数据平台演示项目 — 可一键复现的开源数据工程实战项目  
-> 混合开发环境：Windows 11 + VirtualBox Ubuntu 24.04 + Docker Desktop + K3s(K8s)  
-> 4周闭环交付：数据采集 → 处理 → 调度 → 质量 → 监控 → 部署
+> **端到端数据 & AI 平台 Demo** — Kafka → PySpark → dbt → Feast → MLflow → Milvus/FAISS → RAG → Neo4j → Airflow → GE → Prometheus/Grafana → FastAPI + React。
+> **一键部署 · Docker Compose 复现 · 全链路数据/AI 工程实践**
+
+一个把**数据工程主链**（采集/处理/建模/质量/调度/监控）与**AI 数据基础设施**（向量检索 / 特征平台 / 实验跟踪 / RAG 知识库 / 图分析）串起来、可一键跑通的工程演示。面向 **AI 大数据工程师 / 数据平台工程师** 岗位的完整作品。
+
+> ⚙️ 环境：Windows 11 + VirtualBox Ubuntu 24.04 + Docker Desktop + K3s；全部服务容器化，`start_all.bat` / `one_click_start.sh` 一键拉起。
 
 ---
 
-## 📊 项目架构
+## ✨ 能证明什么能力
+
+| 能力域 | 落地组件 | 关键点 |
+| --- | --- | --- |
+| **数据管道工程** | Kafka → PySpark → Airflow → dbt | 消息采集、JSONL→Parquet、端到端 DAG 调度、`raw→clean` 分层建模 |
+| **数据质量治理** | Great Expectations + dbt test | 期望套件校验 + 模型约束 + CI 集成 |
+| **向量检索 / Embedding** | Milvus + sentence-transformers | 事件/商品语义搜索，384 维 embedding pipeline（实时+离线） |
+| **特征平台** | Feast（离线/在线特征） | 与 dbt clean 层对接，训练/在线一致性特征，OnDemand FeatureView |
+| **实验跟踪 / 模型** | MLflow + scikit-learn | RandomForest 训练、参数/指标记录、Model Registry，经前端反代访问 |
+| **RAG 知识库** | FAISS + LLM（DeepSeek/OpenAI 兼容） | 事件数据分块→索引→语义检索→Prompt 构建→LLM 问答，可测（无 key 也可跑检索） |
+| **图数据库分析** | Neo4j + Cypher | 用户行为图、商品共现、转化漏斗、协同过滤推荐、高价值用户发现 |
+| **数据血缘可视化** | dbt manifest + Mermaid.js | 表级/列级血缘 HTML 图 |
+| **性能基准** | Pandas / DuckDB / Milvus | Parquet 查询、向量检索、embedding 吞吐对比脚本 |
+| **可观测 / 部署** | Prometheus + Grafana + K8s + CI | 实时指标面板、Docker Compose/K3s 清单、GitHub Actions 8-job 流水线 |
+
+---
+
+## 🏗️ 系统架构
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────────┐
@@ -27,379 +47,120 @@
                 │
     ┌───────────┼───────────────────────────┐
     │           │                           │
-┌───▼────┐ ┌───▼────────┐ ┌───────────▼────┐ ┌────────────▼───┐
-│ Feast  │ │ Milvus     │ │ MLflow        │ │ RAG / FAISS    │
-│ 特征存储│ │ 向量数据库  │ │ 实验跟踪       │ │ 知识库检索      │
-└────────┘ └────────────┘ └───────────────┘ └────────────────┘
+┌───▼────┐ ┌───▼────────┐ ┌───────────▼────┐ ┌────────────▼───┐ ┌──────────▼───┐
+│ Feast  │ │ Milvus     │ │ MLflow        │ │ RAG / FAISS    │ │ Neo4j        │
+│ 特征存储│ │ 向量数据库  │ │ 实验跟踪       │ │ 知识库检索      │ │ 图数据库      │
+└────────┘ └────────────┘ └───────────────┘ └────────────────┘ └──────────────┘
 ```
 
-### AI/ML 能力矩阵（对接 AI 大数据工程师岗位要求）
-
-| 能力域 | 组件 | 技术 | 说明 |
-|--------|------|------|------|
-| **向量检索** | `demo_vector/` | Milvus + sentence-transformers | 语义搜索、NL→SQL、embedding pipeline |
-| **特征平台** | `feast/` | Feast + PostgreSQL | 离线/在线特征一致性、OnDemandFeatureView |
-| **实验跟踪** | `mlflow/` | MLflow + scikit-learn | 模型训练、参数记录、Model Registry |
-| **RAG 知识库** | `rag_demo/` | FAISS + sentence-transformers | 文档分块、语义检索、Prompt 构建 |
-| **数据血缘** | `lineage/` | dbt manifest + Mermaid.js | 表级/列级血缘可视化 |
-| **性能基准** | `benchmarks/` | Pandas/DuckDB/Milvus | Parquet查询、向量检索、embedding吞吐 |
+核心数据流：`事件采集 → 批处理 → 建模/质量 → 特征 → 训练/AI → 服务 → 监控`
+AI 侧数据流：`事件数据 → embedding/分块 → Milvus/FAISS 向量库 & RAG 知识库 → FastAPI `/api/ai/*` → React 前端`
 
 ---
 
-## 📋 技术栈
-
-| 层级 | 技术 | 版本 |
-|------|------|------|
-| **宿主机** | Windows 11 | 24H2 |
-| **虚拟化** | VirtualBox | 7.2.6 |
-| **虚拟机** | Ubuntu | 24.04 LTS (64-bit, 8GB RAM) |
-| **容器运行时** | Docker Desktop / Docker CE | 29.4.x |
-| **容器编排** | Docker Compose / K3s (Kubernetes) | v5.x / v1.32.x |
-| **消息队列** | Apache Kafka + Zookeeper | 7.5.0 |
-| **工作流调度** | Apache Airflow (CeleryExecutor) | 2.10.4 |
-| **数据处理** | PySpark | 3.5.x |
-| **数据建模** | dbt (data build tool) | 1.8+ |
-| **数据质量** | Great Expectations | 1.0+ |
-| **查询引擎** | DuckDB / Trino | latest |
-| **湖仓格式** | Apache Iceberg | — |
-| **监控** | Prometheus + Grafana | 2.54 / 11.1 |
-| **CI/CD** | GitHub Actions | — |
-| **API 框架** | FastAPI | 0.115+ |
-| **数据库** | PostgreSQL 16 + Redis 7 | — |
-| **向量数据库** | Milvus (分布式向量检索) | 2.4.0 |
-| **特征平台** | Feast (离线/在线特征存储) | 0.40+ |
-| **实验跟踪** | MLflow (模型训练 & 注册表) | 2.14+ |
-| **向量索引** | FAISS (轻量级本地检索) | 1.8+ |
-| **知识库/RAG** | sentence-transformers + FAISS | 2.7+ |
-| **数据血缘** | Mermaid.js 可视化 | — |
-| **CLI 工具** | Git, kubectl, Helm | 2.54 / 1.34 / 3.19 |
-| **开发语言** | Python + Conda | 3.13 / 25.5 |
-| **代码托管** | GitHub | HTTPS + PAT |
-
----
-
-## 📁 项目结构
+## 🧭 仓库导航（给面试官的建议阅读顺序）
 
 ```
-project-data-platform-demo/
-├── README.md                          # 项目说明文档
-├── .gitignore                         # Git 忽略规则
-├── requirements.txt                   # Python 依赖清单
-│
-├── src/                               # 应用源代码
-│   ├── main.py                        # FastAPI API 入口
-│   ├── kafka/                         # Kafka 消息队列脚本
-│   │   ├── producer.py                # 事件生产者（生成模拟数据）
-│   │   └── consumer.py                # 事件消费者（落地 JSONL）
-│   └── spark/                         # PySpark 数据处理脚本
-│       ├── process_data.py            # JSONL → Parquet 清洗转换
-│       ├── iceberg_migrate.py         # Iceberg 湖仓迁移
-│       ├── query_benchmark.py         # 多引擎查询性能对比
-│       └── optimize_performance.py    # 性能优化策略
-│
-├── dags/                              # Airflow DAG 定义
-│   ├── demo_pipeline.py               # 第1周核心流水线 (Kafka→Spark→Parquet)
-│   └── dbt_daily.py                   # 第2周 dbt 每日建模调度
-│
-├── dbt/                               # dbt 数据建模
-│   ├── dbt_project.yml                # dbt 项目配置
-│   ├── profiles.yml                   # 数据库连接配置
-│   ├── models/raw/                    # 原始数据层
-│   │   ├── schema.yml                 # 源定义 & 校验规则
-│   │   └── stg_user_events.sql        # Stage 视图
-│   └── models/clean/                  # 清洗数据层
-│       ├── schema.yml                 # 模型校验规则
-│       ├── dim_users.sql              # 用户维度表
-│       ├── dim_products.sql           # 产品维度表
-│       └── fct_user_events_daily.sql  # 每日事件事实表
-│
-├── great_expectations/                # 数据质量框架
-│   ├── great_expectations.yml         # GE 配置
-│   └── expectations/
-│       └── user_events_suite.json     # 事件数据校验规则集
-│
-├── monitoring/                        # 监控体系
-│   ├── docker-compose-monitoring.yml  # Prometheus + Grafana 服务
-│   ├── prometheus/
-│   │   ├── prometheus.yml             # 采集配置
-│   │   ├── alerts.yml                 # 告警规则
-│   │   └── statsd_mapping.yml         # StatsD 指标映射
-│   └── grafana/
-│       ├── datasources/               # 数据源配置
-│       └── dashboards/
-│           └── airflow-monitoring.json # Airflow 监控面板
-│
-├── .github/workflows/                 # CI/CD
-│   └── ci.yml                         # PR Lint + dbt Test + DAG 校验
-│
-├── docker/                            # Docker 容器环境
-│   ├── docker-compose.yml             # 主 Compose (App+PG+Redis)
-│   ├── docker-compose-airflow.yml     # Airflow 独立 Compose
-│   ├── docker-compose-kafka.yml       # Kafka 独立 Compose
-│   └── Dockerfile                     # 应用镜像
-│
-├── k8s/                               # Kubernetes 资源清单
-│   ├── namespace.yaml
-│   ├── deployment.yaml
-│   └── service.yaml
-│
-├── scripts/                           # 工具脚本
-│   ├── check_env.sh                   # 环境检测
-│   ├── one_click_start.sh             # 一键启动 (Linux/Mac)
-│   ├── one_click_start_windows.sh     # 一键启动 (Windows)
-│   └── one_click_reset.sh             # 一键重置
-│
-├── environments/                      # 环境配置脚本
-│   ├── windows/setup.ps1              # Windows 修复脚本
-│   └── ubuntu/setup.sh                # Ubuntu 配置脚本
-│
-├── notebooks/                         # Jupyter 数据分析 Notebook
-├── plugins/                           # Airflow 插件
-├── data/                              # 数据文件 (.gitignore 排除)
-├── logs/                              # 运行日志 (.gitignore 排除)
-│
-├── demo_vector/                       # 🆕 Milvus 向量检索 demo
-│   ├── docker-compose.vector.yml      # Milvus + etcd + MinIO
-│   ├── embed.py                       # Embedding 生成 & 入库
-│   ├── query_api.py                   # FastAPI 语义检索 API
-│   └── README.md
-│
-├── feast/                             # 🆕 Feast 特征平台
-│   ├── feature_repo/                  # 特征仓库 (FeatureViews)
-│   ├── run_feast_demo.py              # 离线/在线特征演示
-│   └── README.md
-│
-├── mlflow/                            # 🆕 MLflow 实验跟踪
-│   ├── docker-compose.mlflow.yml      # MLflow Tracking Server
-│   ├── train_demo.py                  # 模型训练 & MLflow 记录
-│   └── README.md
-│
-├── rag_demo/                          # 🆕 RAG 知识库检索
-│   ├── build_knowledge_base.py        # FAISS 索引构建
-│   ├── rag_server.py                  # FastAPI 检索 + Prompt API
-│   └── README.md
-│
-├── lineage/                           # 🆕 数据血缘可视化
-│   ├── generate_lineage.py            # 血缘图生成器
-│   └── lineage_output/                # Mermaid HTML/MD 输出
-│
-└── benchmarks/                        # 🆕 性能基准测试
-    ├── run_benchmarks.py              # 综合性能基准脚本
-    └── results/                       # 基准测试结果
+按模块组织的真实目录（★ = 主线入口）：
+├── 主后端        src/main.py ★(FastAPI 聚合 API) / src/{kafka,spark}/
+├── 调度建模      dags/(Airflow) · dbt/(分层建模) · great_expectations/(质量)
+├── AI-ML 模块    demo_vector/(Milvus) · feast/ · mlflow/ · rag_demo/ · neo4j/ ★
+│                 benchmarks/ · lineage/
+├── 前端工作台    frontend/src/(React) ★ — AI Lab/图/血缘/MLflow 可视化
+├── 部署运维      docker/ · k8s/ · monitoring/(Prometheus+Grafana) · environments/
+│                 scripts/(一键启动) · start_all.bat / start_project.ps1
+└── 测试与 CI     tests/ · .github/workflows/ci.yml(8 job)
 ```
+
+**推荐路径 1 —— 快速看懂「做了什么」**：
+`本 README` → `src/main.py`（看 `/api/*` 路由全景）→ `frontend/src/pages/`（看前端接了什么）→ 各模块 `README.md`
+
+**推荐路径 2 —— 检查「数据管道能不能跑、质量怎么保证」**：
+`start_all.bat`（一键起）→ `dags/demo_pipeline.py`（端到端 DAG）→ `dbt/`（建模）→ `great_expectations/` → `.github/workflows/ci.yml`
+
+**推荐路径 3 —— 深挖「AI 数据基础设施」**：
+`rag_demo/`(RAG 链路) → `demo_vector/`(Milvus 向量检索) → `feast/`(特征平台) → `neo4j/`(图分析) → `mlflow/`(实验跟踪)
+
+> ⏱️ **时间有限先看 ★**：后端聚合入口 = `src/main.py`；AI 能力入口 = `rag_demo/` + `neo4j/` + `demo_vector/`。
+> 🗺️ **想按文件深入读代码** → [`docs/CODE_MAP.md`](docs/CODE_MAP.md)。
 
 ---
 
 ## 🚀 快速开始
 
-### 0. 前置条件
-- Docker Desktop 已安装并运行
-- Git 已安装
-- （可选）VirtualBox + Ubuntu 24.04 VM（用于 PySpark 在 VM 执行）
+### 前置条件
+Docker Desktop（已运行）、Git；可选 VirtualBox Ubuntu VM 跑 PySpark 远端模式。
 
-### 1. 克隆仓库
+### 1. 一键启动全部服务（Windows / Linux）
 ```bash
-git clone https://github.com/tiancaijun798/project-data-platform-demo.git
-cd project-data-platform-demo
+# Windows: 双击 或
+.\start_all.bat            # PowerShell 或 cmd 运行，自动起全部 + 初始化图/知识库
+
+# Linux / Mac / Git Bash:
+bash scripts/one_click_start.sh              # 完整模式
+bash scripts/one_click_start.sh --monitoring --ml --vector --neo4j
+bash scripts/one_click_light.sh              # 轻量模式(仅核心，更快)
 ```
 
-### 2. 一键启动全部服务
-```bash
-# Linux / Mac — 完整模式
-bash scripts/one_click_start.sh
+### 2. 访问服务
 
-# 轻量模式（仅核心服务，启动更快）
-bash scripts/one_click_light.sh
-
-# 含 AI/ML 组件
-bash scripts/one_click_start.sh --monitoring --ml --vector
-
-# Windows (Git Bash)
-bash scripts/one_click_start_windows.sh
-
-# Windows (PowerShell)
-.\start_project.ps1
-```
-
-### 3. 环境检测
-```bash
-bash scripts/check_env.sh
-```
-
-### 4. 访问服务
-
-| 服务 | 地址 | 账号 |
+| 服务 | 地址 | 说明 |
 |------|------|------|
-| **Airflow WebUI** | http://localhost:8080 | airflow / airflow |
-| **FastAPI App** | http://localhost:8000 | — |
-| **FastAPI Docs** | http://localhost:8000/docs | — |
+| **前端工作台** | http://localhost:3001 | React；含 AI Lab / 图 / 血缘 / MLflow 页 |
+| **FastAPI Docs** | http://localhost:8000/docs | 全部 API，含 `/api/ai/*` |
+| **Airflow** | http://localhost:8080 | airflow / airflow |
 | **Grafana** | http://localhost:3000 | admin / admin |
-| **Prometheus** | http://localhost:9090 | — |
-| **MLflow** | http://localhost:5000 | — |
-| **Embedding API** | http://localhost:8001/docs | — |
-| **RAG API** | http://localhost:8002/docs | — |
-| **Data Lineage** | `lineage/lineage_output/lineage.html` | — |
+| **Neo4j Browser** | http://localhost:7474 | neo4j / changeme123 |
+| **MLflow** | http://localhost:3001/mlflow/ | 经前端反代 |
+| **数据血缘** | `lineage/lineage_output/lineage.html` | Mermaid 血缘图 |
 
-### 5. 触发数据流水线
-1. 浏览器打开 http://localhost:8080
-2. 搜索 DAG `demo_pipeline`
-3. 手动触发运行
+### 3. 触发数据流水线
+浏览器打开 Airflow → 搜索 DAG `demo_pipeline` → 手动触发 → 数据流经 Kafka→Spark→dbt 落地。
+
+> 💡 **AI 组件**：`start_all.bat` 会顺带初始化 Neo4j 图（500 事件）与 RAG 知识库；向量/图谱的初始化脚本与入口见 `docs/CODE_MAP.md`。
 
 ---
 
-## 📆 6周开发路径
-
-### 第1周：环境上手 + 最小数据流水线 ✅
-- [x] Day1 — 环境校验，Airflow 启动，运行示例 DAG
-- [x] Day2 — 部署 Kafka+Zookeeper，Python 生产者/消费者
-- [x] Day3 — PySpark JSONL→Parquet 数据清洗脚本
-- [x] Day4 — 端到端 Airflow DAG (`demo_pipeline`)
-- [x] Day5 — 代码整理，GitHub 提交，README
-
-### 第2周：工程化落地 + 数据质量 ✅
-- [x] Day6 — dbt 项目骨架，raw→clean 数据模型
-- [x] Day7 — dbt 数据校验规则，Airflow 调度 (`dbt_daily`)
-- [x] Day8 — Great Expectations 数据质量框架集成
-- [x] Day9 — GitHub Actions CI（Lint + dbt + DAG 校验）
-- [x] Day10 — 阶段性成果归档
-
-### 第3周：湖仓存储 + 查询优化 + 监控体系 ✅
-- [x] Day11 — Iceberg 湖仓集成（真实+模拟模式）
-- [x] Day12 — DuckDB/Trino 查询性能对比
-- [x] Day13 — Prometheus+Grafana 监控面板
-- [x] Day14 — 性能优化策略文档
-- [x] Day15 — 开源 PR 方向筛选
-
-### 第4周：一键部署封装 + 开源贡献 + 成果复盘 ✅
-- [x] Day16 — 一键启动/重置脚本
-- [x] Day17 — 部署测试 & README 部署文档
-- [x] Day18 — 开源 PR 备选方向整理
-- [x] Day19 — 项目演示材料
-- [x] Day20 — 知识点复盘
-
-### 🆕 第5周：AI 数据基础设施升级 ✅
-- [x] Day21 — Milvus 向量数据库集成 + embedding pipeline
-- [x] Day22 — Feast 特征平台 (离线/在线特征存储)
-- [x] Day23 — MLflow 实验跟踪 + 模型训练 demo
-- [x] Day24 — RAG 知识库检索 (FAISS + Prompt 构建)
-- [x] Day25 — 数据血缘可视化 (Mermaid.js)
-
-### 🆕 第6周：工程化打磨 ✅
-- [x] Day26 — CI 全面升级 (GE 校验 + 集成测试 + DAG 结构验证)
-- [x] Day27 — 性能基准测试套件 (Parquet/向量/Embedding)
-- [x] Day28 — 轻量一键启动脚本
-- [x] Day29 — 全部模块 README 文档化
-- [x] Day30 — 项目升级汇总 & 面试材料准备
-
----
-
-## 🔧 镜像加速策略
-
-| 工具 | 镜像源 | 状态 |
-|------|--------|------|
-| pip | `https://pypi.tuna.tsinghua.edu.cn/simple` | ✅ |
-| Conda | `https://mirrors.tuna.tsinghua.edu.cn/anaconda/...` | ✅ |
-| apt | `https://mirrors.tuna.tsinghua.edu.cn` | ✅ |
-| Docker Hub | `https://docker.m.daocloud.io` | ✅ |
-| Helm Charts | Bitnami (官方) | ✅ |
-
----
-
-## 🔑 必需环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `DATA_PLATFORM_DB_HOST` | `data-platform-db` | PostgreSQL 主机 |
-| `DATA_PLATFORM_DB_PORT` | `5432` | PostgreSQL 端口 |
-| `DATA_PLATFORM_DB_USER` | `admin` | 数据库用户 |
-| `DATA_PLATFORM_DB_PASSWORD` | `changeme` | **生产环境务必修改！** |
-| `DATA_PLATFORM_DB_NAME` | `data_platform` | 数据库名 |
-| `SPARK_MODE` | `local` | `local`=容器内执行 / `remote`=SSH 到 VM |
-| `VM_HOST` | — | Spark 远端执行 VM 地址（仅 remote 模式） |
-| `VM_USER` | — | VM SSH 用户 |
-| `VM_PASS` | — | VM SSH 密码（**生产用密钥！**） |
-
-复制 `.env.example` 为 `.env` 并修改：
+## 🧪 测试与 CI
 
 ```bash
-cp .env.example .env
-# 编辑 .env 填入你的配置
+python -m pytest tests/ -v     # 52 项：API 端点 / embedding / LLM+RAG 单元测试
+flake8 src/ dags/ tests/       # lint
+bash scripts/check_env.sh      # 环境自检
 ```
 
----
-
-## 🚨 常见问题排查
-
-| 问题 | 原因 | 解决 |
-|------|------|------|
-| Airflow 无法连接数据库 | `airflow-postgres` 容器未启动 | `docker compose -f docker-compose-airflow.yml up -d airflow-postgres airflow-redis` |
-| `generate_events` 失败 | Kafka 未运行 | `docker compose -f docker-compose-kafka.yml up -d` |
-| `check_dbt_env` 显示 "dbt 未安装" | 正常现象，dbt 在宿主机运行 | 不影响，已在宿主机配置好 |
-| Grafana 无数据 | Prometheus 目标离线 | 检查 `http://localhost:9090/targets` |
-| Prometheus targets DOWN | 缺少 exporter 容器 | 目前只需 airflow-statsd + prometheus + app 三个 UP |
-| API `/api/stats/*` 500 错误 | 数据库连接失败 | 确认 `data-platform-db` 容器运行中，检查环境变量 |
-| Parquet 输出为空 | 源数据缺失 | 运行 `python scripts/generate_real_data.py` 生成测试数据 |
+GitHub Actions **8 个 job**：lint+单测 · GE 校验 · smoke · dbt compile/test · DAG 校验 · 集成测试 · AI/ML smoke · CI 汇总徽章。
 
 ---
 
-## 🧪 运行测试
+## 📁 技术栈速览
 
-```bash
-# 单元测试
-python -m pytest tests/ -v
+| 层 | 技术 |
+| --- | --- |
+| 数据管道 | Kafka · PySpark · Airflow(CeleryExecutor) · dbt · Great Expectations |
+| 存储/查询 | PostgreSQL 16 · Redis · DuckDB · Iceberg · MinIO |
+| AI/ML 设施 | Feast · MLflow · Milvus 2.4 · FAISS · sentence-transformers · Neo4j · scikit-learn |
+| 应用/前端 | FastAPI · React(TypeScript) · nginx 反代 |
+| 可观测/部署 | Prometheus · Grafana · Docker Compose · K3s(K8s) · GitHub Actions |
+| 语言/环境 | Python 3.13(Conda) · Git(Bash) · 多级子模块独立 requirements |
 
-# 数据库初始化
-bash scripts/init_database.sh
-
-# dbt 编译验证
-cd dbt && PYTHONUTF8=1 dbt compile
-
-```bash
-# Python lint
-pip install flake8 && flake8 src/ --max-line-length=100
-
-# DAG 语法校验
-python -c "import sys; sys.path.insert(0,'dags'); from demo_pipeline import dag; print(f'✅ {dag.dag_id}')"
-
-# dbt 编译验证
-cd dbt && dbt compile
-
-# 环境检测
-bash scripts/check_env.sh
-```
-
-## 🔄 一键重置
-
-```bash
-# 软重置（保留数据）
-bash scripts/one_click_reset.sh
-
-# 硬重置（删除所有数据卷）
-bash scripts/one_click_reset.sh --hard
-```
+详细版本号与各模块独立文档见对应目录 `README.md`。
 
 ---
 
-## 📝 开源 PR 备选方向
+## 📄 关键文档
 
-| 项目 | 方向 | 难度 | 通过率 |
-|------|------|:--:|:--:|
-| Apache Airflow | 提交自定义 Demo DAG 示例 | 🟢 低 | 高 |
-| dbt | 补充数据建模最佳实践文档 | 🟢 低 | 高 |
-| Great Expectations | 修复文档瑕疵、新增教程代码 | 🟢 低 | 高 |
-| Apache Iceberg | Python API 使用示例 PR | 🟡 中 | 中 |
-
----
-
-## 🏗️ 环境就绪状态
-
-| 环境层 | 检测日期 | 状态 |
-|--------|---------|------|
-| Windows 宿主机 | 2026-07-20 | ✅ 就绪 |
-| VirtualBox Ubuntu VM | 2026-07-20 | 🔧 配置中 (SSH: tiancaijun:1234) |
-| Docker Desktop | 2026-07-20 | ✅ 就绪（7.65 GiB） |
-| GitHub 仓库 | 2026-07-20 | 🚀 活跃开发中 |
+| 位置 | 内容 |
+| --- | --- |
+| `docs/CODE_MAP.md` | 按数据流分层的**代码阅读地图**（每个模块入口 + 文件关系） |
+| `docs/DEVELOPMENT_LOG.md` | 6 周逐日开发日志、环境/镜像加速、开源 PR 方向（过程记录，非作品主体） |
+| `benchmarks/benchmark_report.md` | 基准测试方法与说明 |
+| 各模块 `README.md` | `rag_demo/` `demo_vector/` `feast/` `mlflow/` `neo4j/` `lineage/` 独立文档 |
 
 ---
 
-*项目创建: 2026-07-20 | 6周规划完成: 2026-07-22 | 维护者: 戴俊杰*
+## ⚠️ 说明
+
+- 本项目为**个人简历作品**，公开内容仅供学习交流；`LICENSE` 见仓库根。
+- 运行时产物（FAISS 索引/模型缓存、SQL Server 导出 CSV、数据目录）**不随仓库入库**，由脚本一键重建；个人面试备稿不公开。
+- 混合环境（宿主机 + VM + 容器）为本机开发拓扑，仓库内 `docker/`、`scripts/` 提供容器化一键启动路径。
