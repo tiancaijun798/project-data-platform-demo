@@ -159,8 +159,3 @@ GitHub Actions **8 个 job**：lint+单测 · GE 校验 · smoke · dbt compile/
 
 ---
 
-## ⚠️ 说明
-
-- 本项目为**个人简历作品**，公开内容仅供学习交流；`LICENSE` 见仓库根。
-- 运行时产物（FAISS 索引/模型缓存、SQL Server 导出 CSV、数据目录）**不随仓库入库**，由脚本一键重建；个人面试备稿不公开。
-- 混合环境（宿主机 + VM + 容器）为本机开发拓扑，仓库内 `docker/`、`scripts/` 提供容器化一键启动路径。
