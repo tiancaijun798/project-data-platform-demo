@@ -7,8 +7,7 @@ services:
   mlflow-server:
     image: python:3.11-slim
     container_name: data-mlflow
-    ports:
-      - "5000:5000"
+    # No host port mapping — Steam++ intercepts it. Access via /proxy/mlflow/ only.
     volumes:
       - mlflow_artifacts:/mlflow/artifacts
       - ./train_demo.py:/app/train_demo.py:ro
@@ -16,20 +15,25 @@ services:
       MLFLOW_TRACKING_URI: http://0.0.0.0:5000
       MLFLOW_BACKEND_STORE_URI: postgresql://admin:changeme@data-platform-db:5432/data_platform
       MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+      MLFLOW_ALLOWED_HOSTS: "*"
+      MLFLOW_CORS_ALLOWED_ORIGINS: "*"
       DATA_PLATFORM_DB_HOST: data-platform-db
       DATA_PLATFORM_DB_PORT: "5432"
       DATA_PLATFORM_DB_USER: admin
       DATA_PLATFORM_DB_PASSWORD: changeme
       DATA_PLATFORM_DB_NAME: data_platform
-    command: >
-      bash -c "
-        pip install -q mlflow psycopg2-binary scikit-learn pandas sqlalchemy &&
-        mlflow server
-          --host 0.0.0.0
-          --port 5000
-          --backend-store-uri postgresql://admin:changeme@data-platform-db:5432/data_platform
-          --default-artifact-root /mlflow/artifacts
-      "
+    command:
+      - bash
+      - -c
+      - |
+        pip install -q -i https://pypi.tuna.tsinghua.edu.cn/simple mlflow psycopg2-binary scikit-learn pandas sqlalchemy &&
+        exec mlflow server \
+          --host 0.0.0.0 \
+          --port 5000 \
+          --backend-store-uri postgresql://admin:changeme@data-platform-db:5432/data_platform \
+          --default-artifact-root /mlflow/artifacts \
+          --allowed-hosts "*" \
+          --cors-allowed-origins "*"
     networks:
       - data-platform-net
     healthcheck:
