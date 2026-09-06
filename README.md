@@ -3,13 +3,13 @@
 > **端到端数据 & AI 平台 Demo** — Kafka → PySpark → dbt → Feast → MLflow → Milvus/FAISS → RAG → Neo4j → Airflow → GE → Prometheus/Grafana → FastAPI + React。
 > **一键部署 · Docker Compose 复现 · 全链路数据/AI 工程实践**
 
-一个把**数据工程主链**（采集/处理/建模/质量/调度/监控）与**AI 数据基础设施**（向量检索 / 特征平台 / 实验跟踪 / RAG 知识库 / 图分析）串起来、可一键跑通的工程演示。面向 **AI 大数据工程师 / 数据平台工程师** 岗位的完整作品。
+一个把**数据工程主链**（采集/处理/建模/质量/调度/监控）与**AI 数据基础设施**（向量检索 / 特征平台 / 实验跟踪 / RAG 知识库 / 图分析）串起来、可一键跑通的工程演示。
 
 > ⚙️ 环境：Windows 11 + VirtualBox Ubuntu 24.04 + Docker Desktop + K3s；全部服务容器化，`start_all.bat` / `one_click_start.sh` 一键拉起。
 
 ---
 
-## ✨ 能证明什么能力
+## ✨ 能力
 
 | 能力域 | 落地组件 | 关键点 |
 | --- | --- | --- |
