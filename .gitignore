@@ -63,6 +63,7 @@ kubeconfig.*
 # ==========================================
 data/
 !data/.gitkeep
+!data/seed_events.jsonl
 logs/
 output/
 *.csv
@@ -103,3 +104,16 @@ real_data_test/
 model_cache/
 *.cachedir/
 .faiss
+
+# ==========================================
+# 第7阶段：运行时产物 / 生成数据 (脚本可复现，不提交)
+# ==========================================
+# FAISS 向量库索引 + 分块元数据 + 序列化模型 (build_knowledge_base.py 生成)
+rag_demo/knowledge_base/
+
+# SQL Server 导出产物 (export_to_sqlserver.py 生成)
+sqlserver_export/
+
+# 个人本地工具 / 面试备稿 (不公开)
+INTERVIEW_PREP.md
+generate_project_report.py

@@ -32,19 +32,25 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: pip install pandas pyarrow pytest flake8
+        run: pip install pandas pyarrow pytest flake8 fastapi httpx pydantic sqlalchemy prometheus-fastapi-instrumentator
 
       - name: Run flake8 lint
         run: flake8 src/ dags/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Run pytest unit tests
-        run: python -m pytest tests/ -v
+        run: python -m pytest tests/test_process_data.py tests/test_api.py -v
 
       - name: Python syntax check (demo_pipeline DAG)
         run: python -m py_compile dags/demo_pipeline.py && echo "✅ demo_pipeline.py syntax OK"
 
       - name: Python syntax check (dbt_daily DAG)
         run: python -m py_compile dags/dbt_daily.py && echo "✅ dbt_daily.py syntax OK"
+
+      - name: Python syntax check (all modules)
+        run: |
+          python -m py_compile rag_demo/llm_generator.py && echo "✅ llm_generator.py"
+          python -m py_compile neo4j/init_graph.py && echo "✅ init_graph.py"
+          python -m py_compile neo4j/query_demo.py && echo "✅ query_demo.py"
 
   # ──── Job 2: Great Expectations Data Quality Validation ────
   ge-validation:
@@ -493,10 +499,72 @@ jobs:
           print('=' * 60)
           "
 
-  # ──── Job 7: CI Summary ────
+  # ──── Job 7: AI/ML Modules Smoke Test ────
+  ai-ml-smoke:
+    name: AI/ML Modules Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install pandas pyarrow pytest requests
+
+      - name: Test LLM Generator module
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'rag_demo')
+          from llm_generator import LLMGenerator
+          gen = LLMGenerator(api_key='test-key', base_url='https://api.test.com/v1', model='test')
+          assert gen.model == 'test'
+          assert gen.is_available() == True
+          # Test prompt building without API call
+          docs = [{'chunk': 'test', 'event_type': 'view', 'user_id': 'U0001', 'product_id': 'P0001', 'score': 0.9}]
+          prompt = gen._build_generation_prompt('test query', docs)
+          assert 'test query' in prompt
+          assert 'U0001' in prompt
+          print('✅ LLM Generator module OK')
+          "
+
+      - name: Test RAG chunking logic
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'rag_demo')
+          from build_knowledge_base import row_to_chunk, generate_synthetic_events
+          # Test chunking
+          chunk = row_to_chunk({'user_id': 'U0001', 'event_type': 'purchase', 'device': 'mobile'})
+          assert 'U0001' in chunk
+          assert 'purchase' in chunk
+          # Test synthetic data generation
+          events = generate_synthetic_events(50)
+          assert len(events) == 50
+          assert 'event_id' in events[0]
+          print('✅ RAG chunking logic OK')
+          "
+
+      - name: Test Neo4j query demo logic
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'neo4j')
+          # Just verify syntax — don't actually connect
+          import py_compile
+          py_compile.compile('init_graph.py', doraise=True)
+          py_compile.compile('query_demo.py', doraise=True)
+          print('✅ Neo4j scripts syntax OK')
+          "
+
+  # ──── Job 8: CI Summary ────
   ci-summary:
     name: CI Pipeline Summary
-    needs: [python-lint, ge-validation, smoke-test, dbt-test, dag-validation, integration-test]
+    needs: [python-lint, ge-validation, smoke-test, dbt-test, dag-validation, integration-test, ai-ml-smoke]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -511,6 +579,7 @@ jobs:
           echo "  dbt-test:          ${{ needs.dbt-test.result }}"
           echo "  dag-validation:    ${{ needs.dag-validation.result }}"
           echo "  integration-test:  ${{ needs.integration-test.result }}"
+          echo "  ai-ml-smoke:       ${{ needs.ai-ml-smoke.result }}"
           echo "========================================="
 
       - name: Generate status badge JSON

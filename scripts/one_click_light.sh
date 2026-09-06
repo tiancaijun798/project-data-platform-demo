@@ -20,6 +20,8 @@ DOCKER_DIR="$PROJECT_ROOT/docker"
 MONITORING_DIR="$PROJECT_ROOT/monitoring"
 MLFLOW_DIR="$PROJECT_ROOT/mlflow"
 VECTOR_DIR="$PROJECT_ROOT/demo_vector"
+NEO4J_DIR="$PROJECT_ROOT/neo4j"
+LIGHT_COMPOSE="$DOCKER_DIR/docker-compose.light.yml"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -34,6 +36,7 @@ AIRFLOW=false
 MONITORING=false
 ML=false
 VECTOR=false
+NEO4J=false
 ALL=false
 
 for arg in "$@"; do
@@ -43,6 +46,7 @@ for arg in "$@"; do
         --monitoring|-m) MONITORING=true ;;
         --ml|--mlflow) ML=true ;;
         --vector|-v)   VECTOR=true ;;
+        --neo4j|-n)    NEO4J=true ;;
         --all)         ALL=true ;;
         --help|-h)
             echo "用法: bash scripts/one_click_light.sh [选项]"
@@ -53,6 +57,7 @@ for arg in "$@"; do
             echo "  --monitoring, -m   启用 Prometheus + Grafana"
             echo "  --ml, --mlflow     启用 MLflow 实验跟踪"
             echo "  --vector, -v       启用 Milvus 向量检索"
+            echo "  --neo4j, -n        启用 Neo4j 图数据库"
             echo "  --all              启动全部服务"
             echo "  --help, -h         显示帮助"
             exit 0
@@ -66,6 +71,7 @@ if [ "$ALL" = true ]; then
     MONITORING=true
     ML=true
     VECTOR=true
+    NEO4J=true
 fi
 
 # ---- 打印头部 ----
@@ -81,6 +87,7 @@ TOTAL_STEPS=1  # 基础服务总是启动
 [ "$MONITORING" = true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
 [ "$ML" = true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
 [ "$VECTOR" = true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
+[ "$NEO4J" = true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
 
 CURRENT=0
 
@@ -155,6 +162,20 @@ if [ "$VECTOR" = true ]; then
     fi
 fi
 
+# ---- Step 7: Neo4j ----
+if [ "$NEO4J" = true ]; then
+    step "启动 Neo4j 图数据库"
+    if [ -f "$NEO4J_DIR/docker-compose.neo4j.yml" ]; then
+        # 确保 network 存在
+        docker network create data-platform-net 2>/dev/null || true
+        cd "$NEO4J_DIR"
+        docker compose -f docker-compose.neo4j.yml up -d
+        echo -e "${GREEN}  ✅ Neo4j (http://localhost:7474, neo4j/changeme123)${NC}"
+    else
+        echo -e "${YELLOW}  ⚠️  Neo4j compose 文件未找到，跳过${NC}"
+    fi
+fi
+
 # ---- 等待 & 状态 ----
 echo ""
 echo -e "${CYAN}${BOLD}========================================${NC}"
@@ -168,7 +189,7 @@ echo -e "${CYAN}${BOLD}========================================${NC}"
 echo -e "${CYAN}${BOLD}  访问地址${NC}"
 echo -e "${CYAN}${BOLD}========================================${NC}"
 echo -e "  FastAPI Docs:    ${GREEN}http://localhost:8000/docs${NC}"
-echo -e "  Frontend:        ${GREEN}http://localhost:80${NC}"
+echo -e "  Frontend:        ${GREEN}http://localhost:3001${NC}"
 echo -e "  PostgreSQL:      ${GREEN}localhost:5432${NC}"
 
 if [ "$AIRFLOW" = true ]; then
@@ -187,6 +208,10 @@ fi
 if [ "$VECTOR" = true ]; then
     echo -e "  Embedding API:   ${GREEN}http://localhost:8001/docs${NC}"
     echo -e "  Milvus:          ${GREEN}localhost:19530${NC}"
+fi
+if [ "$NEO4J" = true ]; then
+    echo -e "  Neo4j Browser:   ${GREEN}http://localhost:7474${NC}  (neo4j / changeme123)"
+    echo -e "  Neo4j Bolt:      ${GREEN}bolt://localhost:7687${NC}"
 fi
 
 echo ""

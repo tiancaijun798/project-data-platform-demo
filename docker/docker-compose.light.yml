@@ -1,0 +1,509 @@
+version: '3.9'
+
+# ==========================================
+# Data Platform Demo — 统一轻量 Compose
+# ==========================================
+# 所有服务集中在单一文件，通过 profiles 按需启动。
+#
+# 用法:
+#   仅核心服务:
+#     docker compose -f docker-compose.light.yml --profile core up -d
+#
+#   全部服务:
+#     docker compose -f docker-compose.light.yml --profile all up -d
+#
+#   指定组合:
+#     docker compose -f docker-compose.light.yml --profile core --profile kafka --profile vector up -d
+#
+# Profiles:
+#   core       — PostgreSQL + Redis + FastAPI + Frontend (始终建议启用)
+#   kafka      — Zookeeper + Kafka
+#   airflow    — Airflow webserver + scheduler + worker
+#   monitoring — Prometheus + Grafana
+#   mlflow     — MLflow Tracking Server
+#   vector     — Milvus + etcd + MinIO + Embedding API
+#   neo4j      — Neo4j 图数据库
+#   all        — 以上全部
+# ==========================================
+
+x-common-env: &common-env
+  DATA_PLATFORM_DB_HOST: ${DATA_PLATFORM_DB_HOST:-postgres}
+  DATA_PLATFORM_DB_PORT: ${DATA_PLATFORM_DB_PORT:-5432}
+  DATA_PLATFORM_DB_USER: ${DATA_PLATFORM_DB_USER:-admin}
+  DATA_PLATFORM_DB_PASSWORD: ${DATA_PLATFORM_DB_PASSWORD:-changeme}
+  DATA_PLATFORM_DB_NAME: ${DATA_PLATFORM_DB_NAME:-data_platform}
+  ENV: ${ENV:-dev}
+  PYTHONUNBUFFERED: "1"
+
+services:
+
+  # ============================================================
+  # Profile: core — 基础服务
+  # ============================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: data-platform-db
+    profiles: ["core", "all"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-data_platform}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d data_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: data-platform-redis
+    profiles: ["core", "all"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: data-platform-app
+    profiles: ["core", "all"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../src:/app/src:ro
+      - ../data:/app/data
+    environment:
+      <<: *common-env
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL:-https://api.deepseek.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+      MILVUS_HOST: ${MILVUS_HOST:-milvus}
+      MILVUS_PORT: ${MILVUS_PORT:-19530}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: data-platform-frontend
+    profiles: ["core", "all"]
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Profile: kafka — 消息队列
+  # ============================================================
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: data-platform-zk
+    profiles: ["kafka", "all"]
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: data-platform-kafka
+    profiles: ["kafka", "all"]
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================
+  # Profile: airflow — 工作流调度
+  # ============================================================
+
+  airflow-postgres:
+    image: postgres:16-alpine
+    container_name: airflow-postgres
+    profiles: ["airflow", "all"]
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-redis:
+    image: redis:7-alpine
+    container_name: airflow-redis
+    profiles: ["airflow", "all"]
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  airflow-webserver:
+    image: apache/airflow:2.10.4
+    container_name: airflow-webserver
+    profiles: ["airflow", "all"]
+    ports:
+      - "8080:8080"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: demo-secret-key-change-in-production
+      _AIRFLOW_WWW_USER_USERNAME: airflow
+      _AIRFLOW_WWW_USER_PASSWORD: airflow
+    volumes:
+      - ../dags:/opt/airflow/dags:ro
+      - ../src:/opt/airflow/src:ro
+      - ../data:/opt/airflow/data
+    command: webserver
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-redis:
+        condition: service_healthy
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+  airflow-scheduler:
+    image: apache/airflow:2.10.4
+    container_name: airflow-scheduler
+    profiles: ["airflow", "all"]
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
+    volumes:
+      - ../dags:/opt/airflow/dags:ro
+      - ../src:/opt/airflow/src:ro
+      - ../data:/opt/airflow/data
+    command: scheduler
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+  airflow-worker:
+    image: apache/airflow:2.10.4
+    container_name: airflow-worker
+    profiles: ["airflow", "all"]
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
+    volumes:
+      - ../dags:/opt/airflow/dags:ro
+      - ../src:/opt/airflow/src:ro
+      - ../data:/opt/airflow/data
+    command: celery worker
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-redis:
+        condition: service_healthy
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Profile: monitoring — Prometheus + Grafana
+  # ============================================================
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    container_name: data-platform-prometheus
+    profiles: ["monitoring", "all"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: data-platform-grafana
+    profiles: ["monitoring", "all"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ../monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Profile: mlflow — 实验跟踪
+  # ============================================================
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.14.0
+    container_name: data-platform-mlflow
+    profiles: ["mlflow", "all"]
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_BACKEND_STORE_URI: sqlite:///mlflow.db
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+    volumes:
+      - mlflow_data:/mlflow
+    command:
+      - "mlflow"
+      - "server"
+      - "--host=0.0.0.0"
+      - "--port=5000"
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Profile: vector — Milvus 向量数据库
+  # ============================================================
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: milvus-etcd
+    profiles: ["vector", "all"]
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: milvus-minio
+    profiles: ["vector", "all"]
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    ports:
+      - "9001:9001"
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus:
+    image: milvusdb/milvus:v2.4.0
+    container_name: milvus-standalone
+    profiles: ["vector", "all"]
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    command: milvus run standalone
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - data-platform-net
+
+  embedding-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: embedding-api
+    profiles: ["vector", "all"]
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../demo_vector:/app/demo_vector:ro
+      - ../data:/app/data
+    environment:
+      <<: *common-env
+      MILVUS_HOST: milvus
+      MILVUS_PORT: "19530"
+      EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-local}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL:-https://api.deepseek.com/v1}
+    command: uvicorn demo_vector.query_api:app --host 0.0.0.0 --port 8001
+    depends_on:
+      milvus:
+        condition: service_started
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Profile: neo4j — 图数据库
+  # ============================================================
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: data-platform-neo4j
+    profiles: ["neo4j", "all"]
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/changeme123
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1g
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - data-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ============================================================
+  # Profile: rag — RAG 知识库服务
+  # ============================================================
+
+  rag-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: rag-server
+    profiles: ["rag", "all"]
+    ports:
+      - "8002:8002"
+    volumes:
+      - ../rag_demo:/app/rag_demo:ro
+    environment:
+      <<: *common-env
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-paraphrase-multilingual-MiniLM-L12-v2}
+      RAG_INDEX_PATH: /app/rag_demo/knowledge_base/index.faiss
+      RAG_META_PATH: /app/rag_demo/knowledge_base/metadata.json
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL:-https://api.deepseek.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+    command: uvicorn rag_demo.rag_server:app --host 0.0.0.0 --port 8002
+    networks:
+      - data-platform-net
+    restart: unless-stopped
+
+# ============================================================
+# Networks & Volumes
+# ============================================================
+
+networks:
+  data-platform-net:
+    driver: bridge
+    name: data-platform-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  airflow_postgres_data:
+  prometheus_data:
+  grafana_data:
+  mlflow_data:
+  etcd_data:
+  minio_data:
+  milvus_data:
+  neo4j_data:
+  neo4j_logs:

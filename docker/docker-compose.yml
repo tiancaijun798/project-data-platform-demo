@@ -14,7 +14,7 @@ services:
       dockerfile: Dockerfile
     container_name: data-platform-frontend
     ports:
-      - "80:80"
+      - "3001:80"
     depends_on:
       - app
     networks:
@@ -32,16 +32,23 @@ services:
     volumes:
       - ../src:/app/src:ro
       - ../data:/app/data
+      - ../rag_demo:/app/rag_demo
+      - ../lineage/lineage_output:/app/lineage/lineage_output
+    env_file:
+      - ../.env
     environment:
       - PYTHONUNBUFFERED=1
-      - DATA_PLATFORM_DB_HOST=${DATA_PLATFORM_DB_HOST:-data-platform-db}
-      - DATA_PLATFORM_DB_PORT=${DATA_PLATFORM_DB_PORT:-5432}
-      - DATA_PLATFORM_DB_USER=${DATA_PLATFORM_DB_USER:-admin}
-      - DATA_PLATFORM_DB_PASSWORD=${DATA_PLATFORM_DB_PASSWORD:-changeme}
-      - DATA_PLATFORM_DB_NAME=${DATA_PLATFORM_DB_NAME:-data_platform}
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - DATA_PLATFORM_DB_HOST=data-platform-db
+      - DATA_PLATFORM_DB_PORT=5432
+      - DATA_PLATFORM_DB_USER=admin
+      - DATA_PLATFORM_DB_PASSWORD=changeme
+      - DATA_PLATFORM_DB_NAME=data_platform
     restart: unless-stopped
     networks:
       - data-platform-net
+      - data-vector-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -88,6 +95,9 @@ networks:
   data-platform-net:
     driver: bridge
     name: data-platform-net
+  data-vector-net:
+    external: true
+    name: data-vector-net
 
 volumes:
   postgres_data:
