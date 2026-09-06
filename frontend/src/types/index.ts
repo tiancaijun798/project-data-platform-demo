@@ -67,3 +67,6 @@ export interface QueryResult {
   row_count: number
   elapsed_ms: number
 }
+
+export interface StatsResponse { data: any }
+export interface TableResponse { data: any[] }

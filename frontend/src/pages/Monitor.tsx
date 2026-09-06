@@ -34,7 +34,7 @@ export default function Monitor() {
 
   return (
     <div>
-      <Typography.Title level={3} style={{ marginBottom: 24 }}>实时监控</Typography.Title>
+      <Typography.Title level={3} style={{ marginBottom: 24 }}>实时监控 (12 Services)</Typography.Title>
 
       <Row gutter={[16, 16]}>
         {services.map((s: any) => (
@@ -61,14 +61,14 @@ export default function Monitor() {
         <Col span={24}>
           <Card title="Grafana 监控大屏">
             <iframe
-              src="http://localhost:3000/d-solo/data-platform-monitor/data-platform-monitoring?orgId=1&refresh=10s&theme=dark"
+              src="/grafana/d-solo/data-platform-monitor/data-platform-monitoring?orgId=1&refresh=10s&theme=dark"
               width="100%"
               height="450"
               style={{ border: 0, borderRadius: 8, background: '#141414' }}
               title="Grafana Dashboard"
             />
             <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-              Grafana 完整面板: <a href="http://localhost:3000" target="_blank" rel="noopener noreferrer">localhost:3000</a>（账号 admin / admin）
+              Grafana 完整面板: <a href="/grafana/" target="_blank" rel="noopener noreferrer">打开 Grafana</a>（账号 admin / admin）
             </Typography.Text>
           </Card>
         </Col>

@@ -1,3 +1,5 @@
+import type { StatsResponse, TableResponse } from '../types'
+
 const BASE = '/api/stats'
 
 async function fetchJSON<T>(url: string): Promise<T> {
@@ -7,15 +9,16 @@ async function fetchJSON<T>(url: string): Promise<T> {
 }
 
 export const api = {
-  dashboard: ()     => fetchJSON<any>(`${BASE}/dashboard`),
-  salesTrend: ()    => fetchJSON<any>(`${BASE}/sales-trend`),
-  hourlyHeatmap: () => fetchJSON<any>(`${BASE}/hourly-heatmap`),
-  userSegments: ()  => fetchJSON<any>(`${BASE}/user-segments`),
-  topUsers: ()      => fetchJSON<any>(`${BASE}/top-users`),
-  productRank: ()   => fetchJSON<any>(`${BASE}/product-rank`),
-  categoryShare: () => fetchJSON<any>(`${BASE}/category-share`),
-  funnel: ()        => fetchJSON<any>(`${BASE}/funnel`),
-  services: ()      => fetchJSON<any>(`${BASE}/services`),
+  dashboard: ()     => fetchJSON<StatsResponse>(`${BASE}/dashboard`),
+  salesTrend: ()    => fetchJSON<TableResponse>(`${BASE}/sales-trend`),
+  hourlyHeatmap: () => fetchJSON<TableResponse>(`${BASE}/hourly-heatmap`),
+  userSegments: ()  => fetchJSON<TableResponse>(`${BASE}/user-segments`),
+  topUsers: ()      => fetchJSON<TableResponse>(`${BASE}/top-users`),
+  productRank: ()   => fetchJSON<TableResponse>(`${BASE}/product-rank`),
+  categoryShare: () => fetchJSON<TableResponse>(`${BASE}/category-share`),
+  funnel: ()        => fetchJSON<TableResponse>(`${BASE}/funnel`),
+  services: ()      => fetchJSON<TableResponse>(`${BASE}/services`),
+  dataOverview: ()  => fetchJSON<any>(`${BASE}/data-overview`),
   query: (sql: string) =>
     fetch(`${BASE}/query`, {
       method: 'POST',

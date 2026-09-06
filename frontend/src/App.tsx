@@ -6,6 +6,10 @@ import Products from './pages/Products'
 import Funnel from './pages/Funnel'
 import Monitor from './pages/Monitor'
 import Query from './pages/Query'
+import AILab from './pages/AILab'
+import Graph from './pages/Graph'
+import Lineage from './pages/Lineage'
+import MLFlow from './pages/MLFlow'
 
 export default function App() {
   return (
@@ -16,6 +20,10 @@ export default function App() {
         <Route path="users" element={<Users />} />
         <Route path="products" element={<Products />} />
         <Route path="funnel" element={<Funnel />} />
+        <Route path="ai-lab" element={<AILab />} />
+        <Route path="graph" element={<Graph />} />
+        <Route path="lineage" element={<Lineage />} />
+        <Route path="mlflow" element={<MLFlow />} />
         <Route path="monitor" element={<Monitor />} />
         <Route path="query" element={<Query />} />
       </Route>
