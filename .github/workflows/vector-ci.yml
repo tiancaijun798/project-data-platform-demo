@@ -146,7 +146,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install fastapi uvicorn pydantic sentence-transformers
+          pip install fastapi uvicorn pydantic sentence-transformers pymilvus
 
       - name: Test query_api.py import
         run: |
